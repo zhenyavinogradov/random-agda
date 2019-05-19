@@ -296,3 +296,44 @@ module _ where
       _o1 : Ob (F % νFG →# G % νFG)
       _o2 : (X : Setoid) → Ob ((F % X →# G % X) →# (X →# νFG))
       _eq : (X : Setoid) → (f : Ob (F % X →# G % X)) → Eq (F % X →# G % νFG) (compose! (F %% _o2 X # f) _o1) (compose! f (G %% _o2 X # f))
+
+{-
+F : SetoidFunctor → SetoidFunctor
+μF νF : SetoidFunctor
+
+μF = F μF
+
+d (!A)  = ⊥
+d Id    = ⊤
+d (F+G) = dF + dG
+d (F×G) = dF×G + F×dG
+d (F∘G) = dF∘G × dG
+
+d : SetoidFunctor → SetoidFunctor
+d₂ = (SetoidFunctor → SetoidFunctor) → (SetoidFunctor → SetoidFunctor)
+d₂ F H = d (F H)
+d₂ F = d ∘ F
+
+d (μF)  = dF∘μF + F∘d(μF)
+- F : SetoidFunctor →+ SetoidFunctor
+  - F H = 1+Id×Id×H
+  - F H = λA. 1+A×A×HA
+- μF : SetoidFunctor
+  - μF = 1+Id×Id×μF
+  - μF = μH. 1+Id×Id×H
+  - μF = μH. λA. 1+A×A×HA
+- d F : SetoidFunctor →+ SetoidFunctor
+  - d F = Id×Id
+  - d₂ F = λH. d (F H) = λH. d (1 + Id×Id×H) = λH. (Id+Id)×H
+- d (μF) : SetoidFunctor
+d (μF) = (d∘F) μF + F d(μF)
+
+?⋆:
+d(F⋆G) = dF∘G + F∘dG
+d(F⋆μF) = d (μF)
+
+(A→X)' = (a:A) × (A−a)→X
+(A→F)' = ((X.A→X)∘F)' = (a:A) × (A−a)→F × F'
+
+(μF)' = FreeMonad F (F'∘μF)
+-}
