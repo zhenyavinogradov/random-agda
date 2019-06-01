@@ -1,5 +1,5 @@
 {-# OPTIONS --type-in-type #-}
--- 2019-05-16, calculus on types, setoids
+-- calculus on types, setoids
 module TypeDifferentiation where
 
 -- lib

@@ -1,4 +1,4 @@
--- 2019-05-09, simple type theory with (co)products and (co)induction, aiming for simpler term construction
+-- simple type theory with (co)products and (co)induction, aiming for simpler term construction
 -- awkward to define reduction relation
 module Stlc3 where
 

@@ -1,5 +1,5 @@
--- 2019-05-12, real analysis algebraically: streams of embedded rational intervals
-module Analysis where
+-- real analysis algebraically: streams of embedded rational intervals
+module _ where
 
 -- lib
 module _ where

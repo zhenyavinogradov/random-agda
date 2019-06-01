@@ -1,5 +1,5 @@
 -- programming with random access memory
-module 2019-05-19-store where
+module _ where
 
 module _ where
   -- function

@@ -1,5 +1,5 @@
--- 2019-05-09, untyped lambda calculus
-module Untyped where
+-- untyped lambda calculus
+module _ where
 
 module _ where
   -- function
