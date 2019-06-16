@@ -4,6 +4,17 @@ module _ where
   -- types
   module _ where
     data ⊥ : Set where
+
+    data _+_ (A B : Set) : Set where
+      inl : A → A + B
+      inr : B → A + B
+
+    record _×_ (A B : Set) : Set where
+      constructor _,_
+      field
+        fst : A
+        snd : B
+    open _×_ public
   
     data List (A : Set) : Set where
       ε : List A
@@ -11,11 +22,11 @@ module _ where
 
   -- function
   module _ where
-    _∘_ : ∀ {A B C} → (B → C) → (A → B) → (A → C)
+    _∘_ : {A B C : Set} → (B → C) → (A → B) → (A → C)
     (f ∘ g) a = f (g a)
 
-    identity : ∀ {A} → A → A
-    identity a = a
+    identity : (A : Set) → A → A
+    identity A a = a
 
   -- list
   module _ where
@@ -43,44 +54,94 @@ module _ where
     get (Pa ∷ Ps) here = Pa
     get (Pa ∷ Ps) (there i) = get Ps i
 
+  -- iso
+  module _ where
+    data _≡_ {A : Set} (a : A) : A → Set where
+      refl : a ≡ a
+
+    ≡-compose : {A : Set} {a b c : A} → a ≡ b → b ≡ c → a ≡ c
+    ≡-compose refl refl = refl
+
+    ≡-sym : {A : Set} {a b : A} → a ≡ b → b ≡ a
+    ≡-sym refl = refl
+
+    Eq2 : {A B : Set} → (A → B) → (A → B) → Set
+    Eq2 {A = A} f g = (a : A) → f a ≡ g a
+
+    record Iso (A B : Set) : Set where
+      constructor mkIso
+      field
+        to : A → B
+        from : B → A
+        to∘from : Eq2 (to ∘ from) (identity B)
+        from∘to : Eq2 (from ∘ to) (identity A)
+    open Iso public
+
   -- pred
   module _ where
     Pred : Set → Set₁
     Pred A = A → Set
 
+    {-
     _⊆_ : {A : Set} → Pred A → Pred A → Set
     P ⊆ Q = ∀ {a} → P a → Q a
+    -}
+
+    record _⊆_ {A : Set} (P : Pred A) (Q : Pred A) : Set where
+      constructor mkSub
+      field sub : ∀ {a} → P a → Q a
+    open _⊆_ public
 
     ⊆identity : {A : Set} → (P : Pred A) → P ⊆ P
-    ⊆identity P Pa = Pa
+    sub (⊆identity P) Pa = Pa
 
     ⊆compose : {A : Set} → {P Q R : Pred A} → P ⊆ Q → Q ⊆ R → P ⊆ R
-    ⊆compose P⊆Q Q⊆R Pa = Q⊆R (P⊆Q Pa)
+    sub (⊆compose P⊆Q Q⊆R) Pa = sub Q⊆R (sub P⊆Q Pa)
+
+    -- Eq⊆ : ∀ {A} → {P Q : Pred A} → P ⊆ Q → P ⊆ Q → Set
+    -- Eq⊆ {P = P} R R' = ∀ {a} → (Pa : P a) → sub R Pa ≡ sub R' Pa
+    record Eq⊆ {A : Set} {P Q : Pred A} (F G : P ⊆ Q) : Set where
+      constructor mkEqSub
+      field eqSub : ∀ {a} → (Pa : P a) → sub F Pa ≡ sub G Pa
+    open Eq⊆ public
+
+    Eq⊆-identity : ∀ {A} {P Q : Pred A} → (F : P ⊆ Q) → Eq⊆ F F
+    eqSub (Eq⊆-identity F) Pa = refl
+
+    Eq⊆-compose : ∀ {A} {P Q : Pred A} {F G H : P ⊆ Q} → Eq⊆ F G → Eq⊆ G H → Eq⊆ F H
+    eqSub (Eq⊆-compose F=G G=H) Pa = ≡-compose (eqSub F=G Pa) (eqSub G=H Pa)
+
+    Eq⊆-sym : ∀ {A} {P Q : Pred A} {F G : P ⊆ Q} → Eq⊆ F G → Eq⊆ G F
+    eqSub (Eq⊆-sym F=G) Pa = ≡-sym (eqSub F=G Pa)
+
+    record IsoPred {A : Set} (P Q : A → Set) : Set where
+      constructor mkIsoPred
+      field
+        toP : P ⊆ Q
+        fromP : Q ⊆ P
+        to∘fromP : Eq⊆ (⊆compose fromP toP) (⊆identity Q)
+        from∘toP : Eq⊆ (⊆compose toP fromP) (⊆identity P)
+    open IsoPred public
 
     data _<+_ {A : Set} (a : A) (P : A → Set) : A → Set where
       here : (a <+ P) a
       there : ∀ {a'} → P a' → (a <+ P) a'
 
     _⊆<+_ : ∀ {A} → (a : A) → {P Q : A → Set} → P ⊆ Q → (a <+ P) ⊆ (a <+ Q)
-    (a ⊆<+ F) here = here
-    (a ⊆<+ F) (there i) = there (F i)
+    sub (a ⊆<+ F) here = here
+    sub (a ⊆<+ F) (there i) = there (sub F i)
+
+    eq-there : ∀ {A : Set} {P : Pred A} {a a' : A} {i i' : P a'} → i ≡ i' → _≡_ {(a <+ P) a'} (there i) (there i')
+    eq-there refl = refl
+
+    _=⊆<+_ : ∀ {A} → (a : A) → {P Q : A → Set} {f g : P ⊆ Q} → Eq⊆ f g → Eq⊆ (a ⊆<+ f) (a ⊆<+ g)
+    eqSub (a =⊆<+ eq) here = refl
+    eqSub (a =⊆<+ eq) (there x) = eq-there (eqSub eq x)
 
     data _<+>_ {A : Set} (P Q : A → Set) (a : A) : Set where
       inl : P a → (P <+> Q) a
       inr : Q a → (P <+> Q) a
 
-  -- iso
-  module _ where
-    data _≡_ {A : Set} (a : A) : A → Set where
-      refl : a ≡ a
-
-    record Iso (A B : Set) : Set where
-      field
-        to : A → B
-        from : B → A
-        to∘from : ∀ {a} → to (from a) ≡ a
-        from∘to : ∀ {a} → from (to a) ≡ a
-    open Iso public
 
 -- ##########
 module _ (Θ : Set) where
@@ -91,43 +152,109 @@ module _ (Θ : Set) where
   Context : Set₁
   Context = Type → Set
 
-  EqBag : Context → Context → Set
-  EqBag Γ Δ = (τ : Type) → Iso (Γ τ) (Δ τ)
+  EqCtx : Context → Context → Set
+  EqCtx Γ Δ = IsoPred Γ Δ
 
   data Lam : Context → Type → Set where
     var : ∀ {Γ τ} → Γ τ → Lam Γ τ
     app : ∀ {Γ σ τ} → Lam Γ (σ ⇒ τ) → Lam Γ σ → Lam Γ τ
     abs : ∀ {Γ σ τ} → Lam (σ <+ Γ) τ → Lam Γ (σ ⇒ τ)
 
-  app≡ : ∀ {Γ σ τ} → {e₁ e₁' : Lam Γ (σ ⇒ τ)} → {e₂ e₂' : Lam Γ σ} → e₁ ≡ e₁' → e₂ ≡ e₂' → app e₁ e₂ ≡ app e₁' e₂'
-  app≡ refl refl = refl
+  eq-var : ∀ {Γ τ} → {x x' : Γ τ} → x ≡ x' → var {Γ} x ≡ var {Γ} x'
+  eq-var refl = refl
 
-  mapLam : ∀ {Γ Δ τ} → Γ ⊆ Δ → Lam Γ τ → Lam Δ τ
-  mapLam f (var x) = var (f x)
-  mapLam f (app e e') = app (mapLam f e) (mapLam f e')
-  mapLam f (abs e) = abs (mapLam (_ ⊆<+ f) e)
+  eq-app : ∀ {Γ σ τ} → {e₁ e₁' : Lam Γ (σ ⇒ τ)} → {e₂ e₂' : Lam Γ σ} → e₁ ≡ e₁' → e₂ ≡ e₂' → app e₁ e₂ ≡ app e₁' e₂'
+  eq-app refl refl = refl
 
-  mapLamIdentity : ∀ {Γ τ} → (e : Lam Γ τ) → mapLam (⊆identity Γ) e ≡ e
-  mapLamIdentity (var x) = refl
-  mapLamIdentity (app e e') = app≡ (mapLamIdentity e) (mapLamIdentity e')
-  mapLamIdentity (abs e) = {!mapLamIdentity e!}
+  eq-abs : ∀ {Γ σ τ} → {e e' : Lam (σ <+ Γ) τ} → e ≡ e' → abs e ≡ abs e'
+  eq-abs refl = refl
 
-  EqLam : ∀ {Γ Γ'} → EqBag Γ Γ' → ∀ {τ} → Lam Γ τ → Lam Γ' τ → Set
-  EqLam = {!!}
+  mapLam : ∀ {Γ Δ} → Γ ⊆ Δ → Lam Γ ⊆ Lam Δ
+  sub (mapLam f) (var x) = var (sub f x)
+  sub (mapLam f) (app e e') = app (sub (mapLam f) e) (sub (mapLam f) e')
+  sub (mapLam f) (abs e) = abs (sub (mapLam (_ ⊆<+ f)) e)
 
-  IsoLam : ∀ {Γ Δ τ} → EqBag Γ Δ → Iso (Lam Γ τ) (Lam Δ τ)
-  to (IsoLam eqBag) e = mapLam (\{τ : Type} → \Γτ → to (eqBag τ) Γτ) e
-  from (IsoLam eqBag) e = mapLam (\{τ : Type} → \Γτ → from (eqBag τ) Γτ) e
-  to∘from (IsoLam eqBag) = {!!}
-  from∘to (IsoLam eqBag) = {!!}
+  -- ⊆identity: ∀ τ → Γ τ → Γ τ
+  -- f : Γ τ → Γ τ
+  -- f = ⊆identity
+  -- (Γτ : Γ τ) → EqSet (f Γτ) Γτ
+
+  mapLamIdentity
+    : ∀ {Γ}
+    → (f : Γ ⊆ Γ)
+    → (_ : Eq⊆ f (⊆identity Γ))
+    → Eq⊆ (mapLam f) (⊆identity (Lam Γ))
+  eqSub (mapLamIdentity f f-id) (var x) = eq-var (eqSub f-id x)
+  eqSub (mapLamIdentity f f-id) (app e₁ e₂) = eq-app (eqSub (mapLamIdentity f f-id) e₁) (eqSub (mapLamIdentity f f-id) e₂)
+  eqSub (mapLamIdentity f f-id) (abs {σ = σ} e) = eq-abs (eqSub (mapLamIdentity (σ ⊆<+ f) (lem f f-id)) e)
+    where
+      lem
+        : {A : Set} {a : A} {P : Pred A}
+        → (f : P ⊆ P)
+        → (_ : Eq⊆ f (⊆identity P))
+        → Eq⊆ (a ⊆<+ f) (⊆identity (a <+ P))
+      eqSub (lem f f-id) here = refl
+      eqSub (lem f f-id) (there Pa) = eq-there (eqSub f-id Pa)
+
+  mapLamCompose
+    : ∀ {Γ Δ Ω}
+    → (f : Γ ⊆ Δ) → (g : Δ ⊆ Ω) → (g∘f : Γ ⊆ Ω)
+    → (_ : Eq⊆ g∘f (⊆compose f g))
+    → Eq⊆ (mapLam g∘f) (⊆compose (mapLam f) (mapLam g))
+  eqSub (mapLamCompose f g g∘f g∘f-cmp) (var x) = eq-var (eqSub g∘f-cmp x)
+  eqSub (mapLamCompose f g g∘f g∘f-cmp) (app e₁ e₂) = eq-app (eqSub (mapLamCompose f g g∘f g∘f-cmp) e₁) (eqSub (mapLamCompose f g g∘f g∘f-cmp) e₂)
+  eqSub (mapLamCompose f g g∘f g∘f-cmp) (abs {σ = σ} e) = eq-abs (eqSub (mapLamCompose (σ ⊆<+ f) (σ ⊆<+ g) (σ ⊆<+ g∘f) (lem f g g∘f g∘f-cmp)) e)
+    where
+      lem
+        : {A : Set} {a : A} {P Q R : Pred A}
+        → (f : P ⊆ Q) → (g : Q ⊆ R) (g∘f : P ⊆ R)
+        → (_ : Eq⊆ g∘f (⊆compose {_} {P} {Q} {R} f g))
+        → Eq⊆ (a ⊆<+ g∘f) (⊆compose {_} {a <+ P} {a <+ Q} {a <+ R} (a ⊆<+ f) (a ⊆<+ g))
+      eqSub (lem f g g∘f eq) here = refl
+      eqSub (lem f g g∘f eq) (there Pa) = eq-there (eqSub eq Pa)
+
+  mapLamCong : ∀ {Γ Δ} {f g : Γ ⊆ Δ} → (Eq⊆ f g) → Eq⊆ (mapLam f) (mapLam g)
+  eqSub (mapLamCong eq) (var x) = eq-var (eqSub eq x)
+  eqSub (mapLamCong eq) (app e₁ e₂) = eq-app (eqSub (mapLamCong eq) e₁) (eqSub (mapLamCong eq) e₂)
+  eqSub (mapLamCong eq) (abs e) = eq-abs (eqSub (mapLamCong (_ =⊆<+ eq)) e)
+
+  IsoLam : ∀ Γ Δ → IsoPred Γ Δ → IsoPred (Lam Γ) (Lam Δ)
+  IsoLam Γ Δ (mkIsoPred to' from' to∘from' from∘to') = mkIsoPred (mapLam to') (mapLam from') to∘from* from∘to*
+    where
+      to∘from* : Eq⊆ (⊆compose (mapLam from') (mapLam to')) (⊆identity (Lam Δ))
+      to∘from* =
+        Eq⊆-compose {G = mapLam (⊆compose from' to')}
+          (Eq⊆-sym (mapLamCompose from' to' (⊆compose from' to') (Eq⊆-identity _)))
+        (Eq⊆-compose {G = mapLam (⊆identity Δ)}
+          (mapLamCong to∘from')
+          (mapLamIdentity (⊆identity Δ) (Eq⊆-identity _))
+        )
+
+      from∘to* : Eq⊆ (⊆compose (mapLam to') (mapLam from')) (⊆identity (Lam Γ))
+      from∘to* =
+        Eq⊆-compose {G = mapLam (⊆compose to' from')}
+          (Eq⊆-sym (mapLamCompose to' from' (⊆compose to' from') (Eq⊆-identity _)))
+        (Eq⊆-compose {G = mapLam (⊆identity Γ)}
+          (mapLamCong from∘to')
+          (mapLamIdentity (⊆identity Γ) (Eq⊆-identity _))
+        )
+
+  _∪_ _∩_ : {A : Set} → Pred A → Pred A → Pred A
+  (P ∪ Q) a = P a + Q a
+  (P ∩ Q) a = P a × Q a
+
+  _<×>_ : ∀ {Γ Δ τ} → Lam Γ τ → Lam Δ τ → Lam (Γ ∩ Δ) τ
+  var x <×> f = sub (mapLam (mkSub \y → {!!})) f
+  app e e₁ <×> f = {!!}
+  abs e <×> f = {!!}
 
   binds : ∀ {Γ Δ τ} → Lam Γ τ → (Γ ⊆ Lam Δ) → Lam Δ τ
-  binds (var x) ds = ds x
+  binds (var x) ds = sub ds x
   binds (app e e') ds = app (binds e ds) (binds e' ds)
-  binds (abs e) ds = abs (binds e \{ here → var here ; (there x) → mapLam there (ds x) })
+  binds (abs e) ds = abs (binds e (mkSub \{ here → var here ; (there x) → sub (mapLam (mkSub there)) (sub ds x) }))
 
   bindsa : ∀ {Γ Γ' τ} → Lam (Γ' <+> Γ) τ → (Γ' ⊆ Lam Γ) → Lam Γ τ
-  bindsa e ds = binds e \{ (inl x) → ds x ; (inr y) → var y  }
+  bindsa e ds = binds e (mkSub \{ (inl x) → sub ds x ; (inr y) → var y })
 
   data Red {Γ τ} : Lam Γ τ → Lam Γ τ → Set where
 
@@ -167,9 +294,9 @@ module _ (Θ : Set) where
   All2P {A} P Q2 F = {a : A} → (Pa : P a) → Q2 (F Pa)
 
   postulate
-    tr : {Γ Γ' : Context} → (eqBag : EqBag Γ Γ') → ∀ {τ} → (e : Lam Γ τ) (e' : Lam Γ' τ) → (P : ∀ {Γ#} → Lam Γ# τ → Set) → P e → P {!mapLam (to (eqBag τ))!}
+    tr : {Γ Γ' : Context} → (eqCtx : EqCtx Γ Γ') → ∀ {τ} → (e : Lam Γ τ) (e' : Lam Γ' τ) → (P : ∀ {Γ#} → Lam Γ# τ → Set) → P e → P {!mapLam (to (eqCtx τ))!}
 
-  lem : ∀ Γ σs τ → (e : Lam (σs <+> Γ) τ) → (ds : σs ⊆ Lam Γ) → (usnds : All2P σs USN ds) → USN (bindsa e ds)
+  lem : ∀ Γ σs τ → (e : Lam (σs <+> Γ) τ) → (ds : σs ⊆ Lam Γ) → (usnds : All2P σs USN (sub ds)) → USN (bindsa e ds)
   lem Γ σs τ (var (inl x)) ds usnds = usnds x
   usn (lem Γ σs .(τs *⇒ τ) (var (inr x)) ds usnds) τs τ args es usnes = {!!}
   usn (lem Γ σs .(τs *⇒ τ) (app {σ = σ} e₁ e₂) ds usnds) τs τ args es usnes = usn (lem Γ σs _ e₁ ds usnds) (σ ∷ τs) τ args (bindsa e₂ ds ∷ es) (lem Γ σs _ e₂ ds usnds ∷ usnes)
