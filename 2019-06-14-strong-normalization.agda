@@ -28,6 +28,9 @@ module _ where
     identity : (A : Set) → A → A
     identity A a = a
 
+    _€_ : {A B : Set} → A → (A → B) → B
+    x € f = f x
+
   -- list
   module _ where
     _++_ : ∀ {A} → List A → List A → List A
@@ -53,6 +56,11 @@ module _ where
     get : ∀ {A} {P : A → Set} {a as} → All P as → In as a → P a
     get (Pa ∷ Ps) here = Pa
     get (Pa ∷ Ps) (there i) = get Ps i
+    
+    mapAll2 : {A : Set} {P : A → Set} {P2 Q2 : {a : A} → P a → Set} → ({a : A} → (Pa : P a) → P2 Pa → Q2 Pa) → {as : List A} → {Ps : All P as} → All2 P2 Ps → All2 Q2 Ps
+    mapAll2 f ε = ε
+    mapAll2 f (P2P ∷ P2Ps) = f _ P2P ∷ mapAll2 f P2Ps
+
 
   -- iso
   module _ where
@@ -169,6 +177,9 @@ module _ (Θ : Set) where
   eq-abs : ∀ {Γ σ τ} → {e e' : Lam (σ <+ Γ) τ} → e ≡ e' → abs e ≡ abs e'
   eq-abs refl = refl
 
+  varS : ∀ {Γ} → Γ ⊆ Lam Γ
+  varS = mkSub var
+
   mapLam : ∀ {Γ Δ} → Γ ⊆ Δ → Lam Γ ⊆ Lam Δ
   sub (mapLam f) (var x) = var (sub f x)
   sub (mapLam f) (app e e') = app (sub (mapLam f) e) (sub (mapLam f) e')
@@ -218,8 +229,8 @@ module _ (Θ : Set) where
   eqSub (mapLamCong eq) (app e₁ e₂) = eq-app (eqSub (mapLamCong eq) e₁) (eqSub (mapLamCong eq) e₂)
   eqSub (mapLamCong eq) (abs e) = eq-abs (eqSub (mapLamCong (_ =⊆<+ eq)) e)
 
-  IsoLam : ∀ Γ Δ → IsoPred Γ Δ → IsoPred (Lam Γ) (Lam Δ)
-  IsoLam Γ Δ (mkIsoPred to' from' to∘from' from∘to') = mkIsoPred (mapLam to') (mapLam from') to∘from* from∘to*
+  isoLam : ∀ Γ Δ → IsoPred Γ Δ → IsoPred (Lam Γ) (Lam Δ)
+  isoLam Γ Δ (mkIsoPred to' from' to∘from' from∘to') = mkIsoPred (mapLam to') (mapLam from') to∘from* from∘to*
     where
       to∘from* : Eq⊆ (⊆compose (mapLam from') (mapLam to')) (⊆identity (Lam Δ))
       to∘from* =
@@ -238,23 +249,35 @@ module _ (Θ : Set) where
           (mapLamCong from∘to')
           (mapLamIdentity (⊆identity Γ) (Eq⊆-identity _))
         )
-
-  _∪_ _∩_ : {A : Set} → Pred A → Pred A → Pred A
-  (P ∪ Q) a = P a + Q a
-  (P ∩ Q) a = P a × Q a
-
-  _<×>_ : ∀ {Γ Δ τ} → Lam Γ τ → Lam Δ τ → Lam (Γ ∩ Δ) τ
-  var x <×> f = sub (mapLam (mkSub \y → {!!})) f
-  app e e₁ <×> f = {!!}
-  abs e <×> f = {!!}
-
   binds : ∀ {Γ Δ τ} → Lam Γ τ → (Γ ⊆ Lam Δ) → Lam Δ τ
   binds (var x) ds = sub ds x
   binds (app e e') ds = app (binds e ds) (binds e' ds)
   binds (abs e) ds = abs (binds e (mkSub \{ here → var here ; (there x) → sub (mapLam (mkSub there)) (sub ds x) }))
 
+  -- Γ ⊆ Lam Γ
+  -- (Γ ⊆ Δ) → (Lam Γ ⊆ Lam Δ)
+  -- Γ ⊆ Lam Δ
+  -- σ <+ Γ ⊆ Lam (σ <+ Δ)
+
+  traverse : ∀ {Γ Δ σ} → Γ ⊆ Lam Δ → (σ <+ Γ) ⊆ Lam (σ <+ Δ)
+  sub (traverse ds) here = var here
+  sub (traverse ds) (there x) = sub (mapLam (mkSub there)) (sub ds x)
+
+  binds' : ∀ {Γ Δ} → (Γ ⊆ Lam Δ) → (Lam Γ ⊆ Lam Δ)
+  sub (binds' ds) (var x) = sub ds x
+  sub (binds' ds) (app e e') = app (sub (binds' ds) e) (sub (binds' ds) e')
+  sub (binds' ds) (abs e) = abs (sub (binds' (traverse ds)) e)
+
   bindsa : ∀ {Γ Γ' τ} → Lam (Γ' <+> Γ) τ → (Γ' ⊆ Lam Γ) → Lam Γ τ
   bindsa e ds = binds e (mkSub \{ (inl x) → sub ds x ; (inr y) → var y })
+
+  ⊆-pair : {A : Set} → {P Q R : Pred A} → P ⊆ R → Q ⊆ R → (P <+> Q) ⊆ R
+  sub (⊆-pair P⊆R Q⊆R) (inl Pa) = sub P⊆R Pa
+  sub (⊆-pair P⊆R Q⊆R) (inr Qa) = sub Q⊆R Qa
+
+  bindsa' : ∀ {Γ Γ'} → (Γ' ⊆ Lam Γ) → (Lam (Γ' <+> Γ) ⊆ Lam Γ)
+  -- bindsa' ds = binds' (mkSub \{ (inl x) → sub ds x ; (inr y) → var y })
+  bindsa' ds = binds' (⊆-pair ds (mkSub var))
 
   data Red {Γ τ} : Lam Γ τ → Lam Γ τ → Set where
 
@@ -290,15 +313,46 @@ module _ (Θ : Set) where
     field usn : (σs : List Type) → (τ : Type) → (r : Args σs τ τ') → (es : All (Lam Γ) σs) → (usnes : All2 USN es) → SN (app* (toArgs r e) es)
   open USN public
 
-  All2P : {A : Set} (P : A → Set) {Q : A → Set} → (Q2 : {a : A} → Q a → Set) → (F : {a : A} → P a → Q a) → Set
-  All2P {A} P Q2 F = {a : A} → (Pa : P a) → Q2 (F Pa)
+  usn⇒sn : ∀ {Γ τ} → (e : Lam Γ τ) → USN e → SN e
+  usn⇒sn {Γ} {τ} e usne = usn usne ε τ args ε ε  
 
-  postulate
-    tr : {Γ Γ' : Context} → (eqCtx : EqCtx Γ Γ') → ∀ {τ} → (e : Lam Γ τ) (e' : Lam Γ' τ) → (P : ∀ {Γ#} → Lam Γ# τ → Set) → P e → P {!mapLam (to (eqCtx τ))!}
+  usn-iso : ∀ {Γ Δ τ} → (iso : IsoPred Γ Δ) → (e : Lam Γ τ) → USN e → USN (sub (toP (isoLam _ _ iso)) e)
+  usn-iso = {!!}
 
-  lem : ∀ Γ σs τ → (e : Lam (σs <+> Γ) τ) → (ds : σs ⊆ Lam Γ) → (usnds : All2P σs USN (sub ds)) → USN (bindsa e ds)
+  All2P : {A : Set} (P : A → Set) {Q : A → Set} → (Q2 : {a : A} → Q a → Set) → (F : P ⊆ Q) → Set
+  All2P {A} P Q2 F = {a : A} → (Pa : P a) → Q2 (sub F Pa)
+
+  sn-app-var : ∀ {Γ σs τ} → (x : Γ (σs *⇒ τ)) → (es : All (Lam Γ) σs) → All2 SN es → SN (app* (var x) es)
+  sn-app-var = {!!}
+
+  sn-lam : ∀ {Γ σ τ} → (e : Lam (σ <+ Γ) τ) → SN e → SN (abs e)
+  sn-lam = {!!}
+
+  -- lem : ∀ Γ σs τ → (e : Lam (σs <+> Γ) τ) → (ds : σs ⊆ Lam Γ) → (usnds : All2P σs USN ds) → USN (bindsa e ds)
+  lem : ∀ Γ σs τ → (e : Lam (σs <+> Γ) τ) → (ds : σs ⊆ Lam Γ) → (usnds : All2P σs USN ds) → USN (sub (bindsa' ds) e)
   lem Γ σs τ (var (inl x)) ds usnds = usnds x
-  usn (lem Γ σs .(τs *⇒ τ) (var (inr x)) ds usnds) τs τ args es usnes = {!!}
-  usn (lem Γ σs .(τs *⇒ τ) (app {σ = σ} e₁ e₂) ds usnds) τs τ args es usnes = usn (lem Γ σs _ e₁ ds usnds) (σ ∷ τs) τ args (bindsa e₂ ds ∷ es) (lem Γ σs _ e₂ ds usnds ∷ usnes)
-  usn (lem Γ σs .(σ ⇒ τ) (abs {σ = σ} {τ = τ} e) ds usnds) .ε .(σ ⇒ τ) args ε ε = {!lem Γ (σ <+ σs) _ !}
-  usn (lem Γ σs .(σ ⇒ (τs *⇒ τ)) (abs {σ = σ} e) ds usnds) (σ ∷ τs) τ args (e₁ ∷ es) (usne₁ ∷ usnes) = {!lem Γ!}
+  usn (lem Γ σs .(τs *⇒ τ) (var (inr x)) ds usnds) τs τ args es usnes = sn-app-var x es (mapAll2 usn⇒sn usnes)
+  usn (lem Γ σs .(τs *⇒ τ) (app {σ = σ} e₁ e₂) ds usnds) τs τ args es usnes = usn (lem Γ σs _ e₁ ds usnds) (σ ∷ τs) τ args (sub (bindsa' ds) e₂ ∷ es) (lem Γ σs _ e₂ ds usnds ∷ usnes)
+  usn (lem Γ σs .(σ ⇒ τ) (abs {σ = σ} {τ = τ} e) ds usnds) .ε .(σ ⇒ τ) args ε ε = sn-lam _ sn-esub
+    where
+      iso1 : IsoPred (σ <+ (σs <+> Γ)) (σs <+> (σ <+ Γ))
+      iso1 = {!!}
+
+      lem1 : USN (sub (bindsa' (⊆compose ds (mapLam (mkSub there)))) (sub (toP (isoLam _ _ iso1)) e))
+      lem1 = {!!}
+
+      esub : Lam (σ <+ Γ) τ
+      esub = sub (binds' (traverse (⊆-pair ds (mkSub var)))) e
+
+      esub' : Lam (σs <+> (σ <+ Γ)) τ
+      esub' = {!!}
+
+      usn-esub' : USN esub'
+      usn-esub' = {!lem!}
+
+      usn-esub : USN esub
+      usn-esub = {!!}
+
+      sn-esub : SN esub
+      sn-esub = usn⇒sn _ usn-esub
+  usn (lem Γ σs .(σ ⇒ (τs *⇒ τ)) (abs {σ = σ} e) ds usnds) (σ ∷ τs) τ args (e₁ ∷ es) (usne₁ ∷ usnes) = {!!}
