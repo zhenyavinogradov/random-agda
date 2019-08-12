@@ -239,7 +239,7 @@ module _ where
   ~: λf: (A⇒(B⇒R)⇒R) ⇒ (A⇒R) ⇒ R. λg: A⇒R. f (λa:A. λ_:B⇒R. g a) (λa. g a)
   
   ∀ : AbsType tvs → Type tvs
-  ∀-intr : Term (x , Θ) Γ!x ϕ → Term Θ Γ (∀x. ϕ)
+  ∀-intr : Term (x ∷ Θ) Γ!x ϕ → Term Θ Γ (∀x. ϕ)
   ∀-elim : (τ : Type Θ) → Term Θ Γ (∀x. ϕ) → Term Θ Γ ϕ[x/τ]
   --
   ∃ : AbsType tvs → Type tvs
@@ -276,7 +276,7 @@ module _ where
   ∀-elim : T fvs Γ (∀x. ϕ) → (t : Term fvs) → T fvs Γ ϕ[x/t]
   --
   ∃-intr : (t : Term fvs) → T fvs Γ ϕ[x/t] → T fvs Γ (∃x. ϕ)
-  ∃-elim : T fvs Γ (∃x. ϕ) → (a b : Var) × T ((a , 0) ∷ fvs) ((b , ϕ[x/a]) ∷ Γ) ρ!a,b → T fvs Γ ρ
+  ∃-elim : T fvs Γ (∃x. ϕ) → (a b : Var) × T ((a , 0) ∷ fvs) ((b , ϕ[x/a]) ∷ Γ) ρ!a → T fvs Γ ρ
   
   ⟦_⟧
   : FunDegree → Set
