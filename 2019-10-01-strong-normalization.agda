@@ -1,5 +1,6 @@
 module _ where
 
+-- lib
 module _ where
   _€_ : {A B : Set} → A → (A → B) → B
   x € f = f x
@@ -18,9 +19,46 @@ module _ where
     succ : ℕ → ℕ
   {-# BUILTIN NATURAL ℕ #-}
 
+  infixr 5 _∷_
   data List (A : Set) : Set where
     ε : List A
     _∷_ : A → List A → List A
+
+  single : {A : Set} → A → List A
+  single a = a ∷ ε
+
+  mapList : {A B : Set} → (A → B) → (List A → List B)
+  mapList f ε = ε
+  mapList f (a ∷ as) = f a ∷ mapList f as
+
+  _++_ : {A : Set} → List A → List A → List A
+  ε ++ ys = ys
+  (x ∷ xs) ++ ys = x ∷ (xs ++ ys)
+
+  data Elem {A : Set} : List A → Set where
+    here : ∀ {a as} → Elem (a ∷ as)
+    there : ∀ {a as} → Elem as → Elem (a ∷ as)
+
+  elemr : {A : Set} {ys : List A} → (xs : List A) → Elem ys → Elem (xs ++ ys)
+  elemr ε i = i
+  elemr (x ∷ xs) i = there (elemr xs i)
+
+  elemins : {A : Set} {a : A} {ys : List A} → (xs : List A) → Elem (xs ++ ys) → Elem (xs ++ (a ∷ ys))
+  elemins ε i = there i
+  elemins (x ∷ xs) here = here
+  elemins (x ∷ xs) (there i) = there (elemins xs i)
+
+  elemmap : {A B : Set} → {xs : List A} → (f : A → B) → Elem xs → Elem (mapList f xs)
+  elemmap f here = here
+  elemmap f (there i) = there (elemmap f i)
+
+  data All {A : Set} (P : A → Set) : List A → Set where
+    ε : All P ε
+    _∷_ : ∀ {a as} → P a → All P as → All P (a ∷ as)
+
+  mapAll : {A : Set} {P Q : A → Set} → ({a : A} → P a → Q a) → {as : List A} → All P as → All Q as
+  mapAll f ε = ε
+  mapAll f (Pa ∷ Pas) = f Pa ∷ mapAll f Pas
 
   data Fin : ℕ → Set where
     zero : {n : ℕ} → Fin (succ n)
@@ -34,177 +72,92 @@ module _ where
     ε : AllV P ε
     _∷_ : {n : ℕ} {a : A} {as : Vector A n} → P a → AllV P as → AllV P (a ∷ as)
 
+  postulate String : Set
+  {-# BUILTIN STRING String #-}
+
   data _≡_ {A : Set} (a : A) : A → Set where
     refl : a ≡ a
+  {-# BUILTIN EQUALITY _≡_ #-}
 
   transport : {A : Set} → (P : A → Set) → {a a' : A} → a ≡ a' → P a → P a'
   transport P refl Pa = Pa
 
-data Type : Set where
-  -- π σ : List Type → Type
-  _⇒_ : Type → Type → Type
-  Nat : Type
+  cong : {A B : Set} → (f : A → B) → {a a' : A} → a ≡ a' → f a ≡ f a'
+  cong f refl = refl
 
-postulate String : Set
-{-# BUILTIN STRING String #-}
 
-data Var : Set where
-  $ : ℕ → String → Var
+-- Valid
+module _ where
+  data Type : Set where
+    -- π σ : List Type → Type
+    _⇒_ : Type → Type → Type
+    Nat : Type
 
-Abs : Set → Set
-Abs T = Var × T
+  Context : Set
+  Context = List Type
+  
+  data Term (Γ : Context) : Set where
+    var : (i : Elem Γ) → Term Γ
+    --llet : (ρ τ : Type) → (x : Var) → Term{-ρ-} → Term{-x:ρ⊢τ-} → Term{-τ-}
+  
+  {-
+    π-intr : (n : ℕ) → (τs : Vector Type n) → (Ms : Vector Term{-τᵢ-} n) → Term{-π τs-}
+    π-elim : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-π τs-} → Term{-τᵢ-}
+  
+    σ-intr : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-τᵢ-} → Term{-σ τs-}
+    σ-elim : (n : ℕ) → (τs : Vector Type n) → (ρ : Type) → (Ms : Vector (Abs Term{-τᵢ⊢ρ-}) n) → Term{-σ τs-} → Term{-ρ-}
+    -}
+  
+    ⇒-intr : (ρ τ : Type) → Term (ρ ∷ Γ) {-τ-} → Term Γ {-ρ⇒τ-}
+    ⇒-elim : (ρ τ : Type) → Term Γ {-ρ-} → Term Γ {-ρ⇒τ-} → Term Γ {-τ-}
+  
+    N-elim : (ρ : Type) → Term Γ {-ρ-} → Term (ρ ∷ Γ) {-ρ-} → Term Γ {-ℕ-} → Term Γ {-ρ-}
+    N-zero : Term Γ {-ℕ-}
+    N-succ : Term Γ {-ℕ-} → Term Γ {-ℕ-}
+  
+  {-
+    M-nothing : (τ : Type) → Term{-Maybe τ-}
+    M-just : (τ : Type) → Term{-τ-} → Term{-Maybe τ-}
+    M-elim : (τ ρ : Type) → Term{-ρ-} → {-(x : Var) →-} Term{-x:τ⊢ρ-} → Term{-Maybe τ-} → Term{-ρ-}
+  
+    S-intr : (τ ρ : Type) → {-(x : Var) →-} Term{-x:ρ⊢τ-} → Term{-x:ρ⊢ρ-} → Term{-ρ-} → Term{-Stream τ-}
+    S-head : (τ : Type) → Term{-Stream τ-} → Term{-τ-}
+    S-tail : (τ : Type) → Term{-Stream τ-} → Term{-Stream τ-}
+  
+    CoN-intr : (ρ : Type) → {-(x : Var) →-} Term{-x:ρ⊢ρ-} → Term{-ρ-} → Term{-CoN-}
+    CoN-elim : Term{-CoN-} → Term{-Maybe CoN-}
+    -}
+  
+  data Has : (Γ : Context) → Elem Γ → Type → Set where
+    here : ∀ {Γ τ} → Has (τ ∷ Γ) here τ
+    there : ∀ {Γ i τ p} → Has Γ i τ → Has (p ∷ Γ) (there i) τ
+  
+  data Valid : (Γ : Context) → Type → Term Γ → Set where
+    #var : ∀ {Γ} → (i : Elem Γ) → (τ : Type) → (h : Has Γ i τ) → Valid Γ τ (var i)
+    -- #llet : ∀ {Γ} → (ρ τ : Type) → (x : Var) → (N : Term{-ρ-}) → Valid Γ ρ N → (M : Term{-x:ρ⊢τ-}) → Valid ((x , ρ) ∷ Γ) τ M → Valid Γ τ (llet ρ τ x N M)
+  
+  {-
+    #π-intr : ∀ {Γ} → (n : ℕ) → (τs : Vector Type n) → (Ms : Vector Term{-τᵢ-} n) → AllV (Valid Γ {!!}
+    #π-elim : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-π τs-} → Term{-τᵢ-} → {!!}
+  
+    #σ-intr : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-τᵢ-} → Term{-σ τs-} → {!!}
+    #σ-elim : (n : ℕ) → (τs : Vector Type n) → (ρ : Type) → (Ms : Vector (Abs Term{-τᵢ⊢ρ-}) n) → Term{-σ τs-} → Term{-ρ-} → {!!}
+    -}
+  
+    #⇒-intr : ∀ {Γ} → (ρ τ : Type) → (M : Term (ρ ∷ Γ) {-τ-}) → Valid (ρ ∷ Γ) τ M → Valid Γ (ρ ⇒ τ) (⇒-intr ρ τ M)
+    #⇒-elim : ∀ {Γ} → (ρ τ : Type)
+            → (N : Term Γ {-ρ-}) → (#N : Valid Γ ρ N)
+            → (M : Term Γ {-ρ⇒τ-}) → (#M : Valid Γ (ρ ⇒ τ) M)
+            → Valid Γ τ (⇒-elim ρ τ N M)
+  
+    #N-zero : ∀ {Γ} → Valid Γ Nat N-zero
+    #N-succ : ∀ {Γ} → (M : Term Γ {-ℕ-}) → Valid Γ Nat M → Valid Γ Nat (N-succ M)
+    #N-elim : ∀ {Γ} → (ρ : Type)
+           → (N₀ : Term Γ {-ρ-}) → Valid Γ ρ N₀
+           → (Nₛ : Term (ρ ∷ Γ) {-ρ-}) → Valid (ρ ∷ Γ) ρ Nₛ
+           → (M : Term Γ {-ℕ-}) → Valid Γ Nat M
+           → Valid Γ ρ (N-elim ρ N₀ Nₛ M)
 
-data Term : Set where
-  var : (τ : Type) → (x : Var) → Term
-  --llet : (ρ τ : Type) → (x : Var) → Term{-ρ-} → Term{-x:ρ⊢τ-} → Term{-τ-}
-
-{-
-  π-intr : (n : ℕ) → (τs : Vector Type n) → (Ms : Vector Term{-τᵢ-} n) → Term{-π τs-}
-  π-elim : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-π τs-} → Term{-τᵢ-}
-
-  σ-intr : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-τᵢ-} → Term{-σ τs-}
-  σ-elim : (n : ℕ) → (τs : Vector Type n) → (ρ : Type) → (Ms : Vector (Abs Term{-τᵢ⊢ρ-}) n) → Term{-σ τs-} → Term{-ρ-}
-  -}
-
-  ⇒-intr : (ρ τ : Type) → (x : Var) → Term{-x:ρ⊢τ-} → Term{-ρ⇒τ-}
-  ⇒-elim : (ρ τ : Type) → Term{-ρ-} → Term{-ρ⇒τ-} → Term{-τ-}
-
-  N-elim : (ρ : Type) → Term{-ρ-} → (x : Var) → Term{-x:ρ⊢ρ-} → Term{-ℕ-} → Term{-ρ-}
-  N-zero : Term{-ℕ-}
-  N-succ : Term{-ℕ-} → Term{-ℕ-}
-
-  M-nothing : (τ : Type) → Term{-Maybe τ-}
-  M-just : (τ : Type) → Term{-τ-} → Term{-Maybe τ-}
-  M-elim : (τ ρ : Type) → Term{-ρ-} → (x : Var) → Term{-x:τ⊢ρ-} → Term{-Maybe τ-} → Term{-ρ-}
-
-  S-intr : (τ ρ : Type) → (x : Var) → Term{-x:ρ⊢τ-} → Term{-x:ρ⊢ρ-} → Term{-ρ-} → Term{-Stream τ-}
-  S-head : (τ : Type) → Term{-Stream τ-} → Term{-τ-}
-  S-tail : (τ : Type) → Term{-Stream τ-} → Term{-Stream τ-}
-
-  CoN-intr : (ρ : Type) → (x : Var) → Term{-x:ρ⊢ρ-} → Term{-ρ-} → Term{-CoN-}
-  CoN-elim : Term{-CoN-} → Term{-Maybe CoN-}
-
-Context : Set
-Context = List (Var × Type)
-
-{-
-data Has : Context → Var → Type → Set where
-  here : ∀ {Γ x τ} → Has ((x , τ) ∷ Γ) x τ
-  there : ∀ {Γ x τ p} → Has Γ x τ → Has (p ∷ Γ) x τ
-  -}
-Has : Context → Var → Type → Set
-Has Γ x τ = {!!}
-
-data Valid : Context → Type → Term → Set where
-  #var : ∀ {Γ} → (x : Var) → (τ : Type) → (h : Has Γ x τ) → Valid Γ τ (var τ x)
-  -- #llet : ∀ {Γ} → (ρ τ : Type) → (x : Var) → (N : Term{-ρ-}) → Valid Γ ρ N → (M : Term{-x:ρ⊢τ-}) → Valid ((x , ρ) ∷ Γ) τ M → Valid Γ τ (llet ρ τ x N M)
-
-{-
-  #π-intr : ∀ {Γ} → (n : ℕ) → (τs : Vector Type n) → (Ms : Vector Term{-τᵢ-} n) → AllV (Valid Γ {!!}
-  #π-elim : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-π τs-} → Term{-τᵢ-} → {!!}
-
-  #σ-intr : (n : ℕ) → (τs : Vector Type n) → (i : Fin n) → Term{-τᵢ-} → Term{-σ τs-} → {!!}
-  #σ-elim : (n : ℕ) → (τs : Vector Type n) → (ρ : Type) → (Ms : Vector (Abs Term{-τᵢ⊢ρ-}) n) → Term{-σ τs-} → Term{-ρ-} → {!!}
-  -}
-
-  #⇒-intr : ∀ {Γ} → (ρ τ : Type) → (x : Var) → (M : Term{-x:ρ⊢τ-}) → Valid ((x , ρ) ∷ Γ) τ M → Valid Γ (ρ ⇒ τ) (⇒-intr ρ τ x M)
-  #⇒-elim : ∀ {Γ} → (ρ τ : Type)
-          → (N : Term{-ρ-}) → (#N : Valid Γ ρ N)
-          → (M : Term{-ρ⇒τ-}) → (#M : Valid Γ (ρ ⇒ τ) M)
-          → Valid Γ τ (⇒-elim ρ τ N M)
-
-  #N-zero : ∀ {Γ} → Valid Γ Nat N-zero
-  #N-succ : ∀ {Γ} → (M : Term{-ℕ-}) → Valid Γ Nat M → Valid Γ Nat (N-succ M)
-  #N-elim : ∀ {Γ} → (ρ : Type)
-         → (N₀ : Term{-ρ-}) → Valid Γ ρ N₀
-         → (x : Var) → (Nₛ : Term{-x:ρ⊢ρ-}) → Valid ((x , ρ) ∷ Γ) ρ Nₛ
-         → (M : Term{-ℕ-}) → Valid Γ Nat M
-         → Valid Γ ρ (N-elim ρ N₀ x Nₛ M)
-
-CSubst : Context → Set
-CSubst ε = ⊤
-CSubst ((_ , ρ) ∷ Γ) = Term × CSubst Γ
-
-{-
-record Subst : Set where
-  constructor mkSubst
-  field
-    sskip : ℕ
-    sterms : List Term
-open Subst public
-
-incSubst : Subst → Subst
-sskip (incSubst s) = succ (sskip s)
-sterms (incSubst s) = sterms s
--}
-data Subst : Set where
-  empty : Subst{-Γ⇒Γ-}
-  set : (x : Var) → Term{-Δ⊢τ-} → Subst{-Γ⇒Δ-} → Subst{-x:τ,Γ⇒Δ-}
-  skip : (x : Var) → Subst{-Γ⇒Δ-} → Subst{-x:ρ,Γ⇒x:ρ,Δ-}
-
-_~_ : Subst → Subst → Set
-_~_ = {!!}
-
-apply : Subst{-Δ⇒Ω-} → Subst{-Γ⇒Δ-} → Subst{-Γ⇒Ω-}
-apply = {!!}
-
-subvar : Subst → Type → Var → Term
-subvar = {!!}
-{-
-subvar (mkSubst _ ε) τ v@($ zero _) = var τ v
-subvar (mkSubst zero (U ∷ Us)) τ ($ zero _) = U
-subvar (mkSubst (succ s) (U ∷ Us)) τ v@($ zero _) = var τ v
-subvar (mkSubst (succ s) (U ∷ Us)) τ v@($ (succ s') _) = var τ v
-subvar (mkSubst s ts) τ ($ (succ x) x₁) = {!!}
--}
-
--- asubst : {Γ : Context} → CSubst Γ → Term → Term
-asubst : Subst{-Γ⇒Δ-} → Term{-Γ,Ω⊢τ-} → Term{-Δ,Ω⊢τ-}
-asubst γ (var τ x) = subvar γ τ x
--- asubst γ (llet ρ τ x M M₁) = {!!}
-asubst γ (⇒-intr ρ τ x M) = ⇒-intr ρ τ x (asubst (skip x γ) M)
-asubst γ (⇒-elim ρ τ N M) = ⇒-elim ρ τ (asubst γ N) (asubst γ M)
-asubst γ (N-elim ρ N₀ x Nₛ M) = N-elim ρ (asubst γ N₀) x (asubst (skip x γ) Nₛ) (asubst γ M) 
-asubst γ N-zero = N-zero
-asubst γ (N-succ M) = N-succ (asubst γ M)
-asubst γ _ = {!!}
-
-{-
-  asubst γ₁{Δ⇒Ω} (asubst γ₂{Γ⇒Δ} M{Γ⊢τ}) = asubst (apply γ₁ γ₂){Γ⇒Ω} (asubst γ₁{Δ⇒Ω} M{Γ⊢τ}){Δ}
--}
-
-eqSubst : {γ γ' : Subst} → γ ~ γ' → (M : Term) → asubst γ M ≡ asubst γ' M
-eqSubst = {!!}
-
-subst : (x : Var) → Term{-Γ⊢ρ-} → Term{-x:ρ,Γ⊢τ-} → Term{-Γ⊢τ-}
-subst x N M = asubst (set x N empty) M
-
-data Red : Term → Term → Set where
-  ⇒-elim-red : ∀ {ρ τ} N x M → Red (⇒-elim ρ τ N (⇒-intr ρ τ x M)) (subst x N M)
-  N-elim-zero-red : ∀ {ρ} N₀ x Nₛ → Red (N-elim ρ N₀ x Nₛ N-zero) N₀
-  N-elim-succ-red : ∀ {ρ} N₀ x Nₛ M → Red (N-elim ρ N₀ x Nₛ (N-succ M)) (subst x (N-elim ρ N₀ x Nₛ M) Nₛ)
-
-  ⇒-intr-red : ∀ {ρ τ x M M'} → Red M M' → Red (⇒-intr ρ τ x M) (⇒-intr ρ τ x M')
-  ⇒-elim-N-red : ∀ {ρ τ N N'} → (M : Term) → Red N N' → Red (⇒-elim ρ τ N M) (⇒-elim ρ τ N' M)
-  ⇒-elim-M-red : ∀ {ρ τ M M'} → (N : Term) → Red M M' → Red (⇒-elim ρ τ N M) (⇒-elim ρ τ N M')
-  N-succ-red : ∀ {M M'} → Red M M' → Red (N-succ M) (N-succ M')
-
--- lem-subst-red : (x : Var) → (U M M' : Term) → Red M M' → Red (subst x U M) (subst x U M')
-lem-subst-red : (γ : Subst) → {M M' : Term} → Red M M' → Red (asubst γ M) (asubst γ M')
-lem-subst-red γ (⇒-elim-red N y M) = {!⇒-elim-red (asubst γ N) y (asubst (skip y γ) M)!}
-lem-subst-red γ (N-elim-zero-red N₀ x Nₛ) = N-elim-zero-red (asubst γ N₀) x (asubst (skip x γ) Nₛ)
-lem-subst-red γ (N-elim-succ-red N₀ x Nₛ M) = {!N-elim-succ-red (asubst γ N₀) x (asubst (skip x γ) Nₛ) (asubst γ M)!}
-lem-subst-red γ (⇒-intr-red {x = x} r) = ⇒-intr-red (lem-subst-red (skip x γ) r)
-lem-subst-red γ (⇒-elim-N-red M r) = ⇒-elim-N-red (asubst γ M) (lem-subst-red γ r)
-lem-subst-red γ (⇒-elim-M-red N r) = ⇒-elim-M-red (asubst γ N) (lem-subst-red γ r)
-lem-subst-red γ (N-succ-red r) = N-succ-red (lem-subst-red γ r)
-
--- lem-subst-asubst : {Γ : Context} → ∀ U x M → (γ : CSubst Γ) → asubst {Γ = {!!}} (U , γ) M ≡ subst x U (asubst γ M)
-lem-subst-asubst : ∀ U x M → (γ : Subst) → asubst {!!} M ≡ subst x U (asubst γ M)
-lem-subst-asubst = {!!}
-
-lem-subst-id : ∀ x τ M → subst x (var τ x) M ≡ M
-lem-subst-id = {!!}
 
 {-
 TypeVal : Type → Set
@@ -229,85 +182,349 @@ TermVal _ (#N-succ M #M) vΓ = succ (TermVal M #M vΓ)
 TermVal _ (#N-elim τ N₀ #N₀ x Nₛ #Nₛ M #M) vΓ = ℕcase (TermVal M #M vΓ) (TermVal N₀ #N₀ vΓ) (\vx → TermVal Nₛ #Nₛ (vx , vΓ) )
 -}
 
-data SN (M : Term) : Set where
-  mkSN : ((M' : Term) → Red M M' → SN M') → SN M
 
-TypeVal' : Type → Term → Set
-TypeVal' (ρ ⇒ τ) M = (U : Term) → TypeVal' ρ U → TypeVal' τ (⇒-elim ρ τ U M)
-TypeVal' Nat M = SN M
-
--- ContextVal' : (Γ : Context) → CSubst Γ → Set
--- ContextVal' ε tt = ⊤
--- ContextVal' ((x , ρ) ∷ Γ) (Mx , MΓ) = TypeVal' ρ Mx  × ContextVal' Γ MΓ
-ContextVal' : (Γ : Context) → Subst → Set
-ContextVal' = {!!}
-
-data TRCl {A : Set} (R : A → A → Set) : A → A → Set where
-  ε : (a : A) → TRCl R a a
-  _∷_ : {a b c : A} → R a b → TRCl R b c → TRCl R a c
-
-Red* : Term → Term → Set
-Red* = TRCl Red
-
-cr2 : (τ : Type) → (M M' : Term) → Red M M' → TypeVal' τ M → TypeVal' τ M'
-cr2 (ρ ⇒ τ) M M' r vM = \N vN → cr2 τ (⇒-elim ρ τ N M) (⇒-elim ρ τ N M') (⇒-elim-M-red N r) (vM N vN)
-cr2 Nat M M' r (mkSN sM) = sM M' r
-
-data Neutral : Term → Set where
-  n-var : ∀ {τ x} → Neutral (var x τ)
-  n-⇒-elim : ∀ {ρ τ N M} → Neutral (⇒-elim ρ τ N M)
-
-mutual
-  cr3 : (τ : Type) → (M : Term) → Neutral M → ((M' : Term) → Red M M' → TypeVal' τ M') → TypeVal' τ M
-  cr3 (ρ ⇒ τ) M nM vrM = \U vU → lem ρ τ M nM vrM U vU (cr1 ρ U vU)
-    where
-      lem : ∀ ρ τ M → (nM : Neutral M) → (vrM : (M' : Term) → Red M M' → TypeVal' (ρ ⇒ τ) M') → (U : Term) → TypeVal' ρ U → SN U → TypeVal' τ (⇒-elim ρ τ U M)
-      lem ρ τ M nM vrM U vU (mkSN sU) = cr3 τ (⇒-elim ρ τ U M) n-⇒-elim \K → \
-        { (⇒-elim-N-red {N' = U'} M r) → lem ρ τ M nM vrM U' (cr2 ρ U U' r vU) (sU U' r)
-        ; (⇒-elim-M-red {M' = M'} N r) → vrM M' r U vU
-        }
-  cr3 Nat M nM vrM = mkSN vrM
+-- subst
+module _ where
+  fsucc : ∀ {Γ Δ} → (ρ : Type) → (Elem Γ → Elem Δ) → (Elem (ρ ∷ Γ) → Elem (ρ ∷ Δ))
+  fsucc ρ f here = here
+  fsucc ρ f (there i) = there (f i)
   
-  cr1 : (τ : Type) → (M : Term) → TypeVal' τ M → SN M
-  cr1 (ρ ⇒ τ) M vM = lem ρ τ $x M (cr1 τ (⇒-elim ρ τ $x M) (vM $x (cr3 ρ $x n-var (\M' ()))))
+  mapTerm : ∀ {Γ Δ} → (Elem Γ → Elem Δ) → (Term Γ → Term Δ)
+  mapTerm f (var i) = var (f i)
+  mapTerm f (⇒-intr ρ τ M) = ⇒-intr ρ τ (mapTerm (fsucc ρ f) M) 
+  mapTerm f (⇒-elim ρ τ N M) = ⇒-elim ρ τ (mapTerm f N) (mapTerm f M)
+  mapTerm f (N-elim ρ N₀ Nₛ M) = N-elim ρ (mapTerm f N₀) (mapTerm (fsucc ρ f) Nₛ) (mapTerm f M)
+  mapTerm f N-zero = N-zero
+  mapTerm f (N-succ M) = N-succ (mapTerm f M)
+
+  tsucc : ∀ {Γ} → (ρ : Type) → Term Γ → Term (ρ ∷ Γ)
+  tsucc ρ M = mapTerm there M
+  
+{-
+  skip' : ∀ {Γ Δ} Ω → (ρ : Type) → Subst Γ (Ω ++ Δ) → Subst (ρ ∷ Γ) (Ω ++ (ρ ∷ Δ))
+  skip' Ω ρ γ = (var (elemr Ω here)) ∷ mapAll (mapvar (elemins Ω)) γ 
+
+  ssucc : ∀ {Γ Δ} → (ρ : Type) → Subst Γ Δ → Subst Γ (ρ ∷ Δ)
+  ssucc ρ γ = mapAll (tsucc ρ) γ
+  
+  skip : ∀ {Γ Δ} → (ρ : Type) → Subst Γ Δ → Subst (ρ ∷ Γ) (ρ ∷ Δ)
+  skip ρ γ = var here ∷ ssucc ρ γ
+
+  identity : (Γ : Context) → Subst Γ Γ
+  identity ε = ε
+  identity (ρ ∷ Γ) = skip ρ (identity Γ)
+
+  identity' : (Ω Γ : Context) → Subst Γ (Ω ++ Γ)
+  identity' Ω ε = ε
+  identity' Ω (ρ ∷ Γ) = var (elemr Ω here) ∷ {!identity' (Ω ++ single ρ) Γ!}
+
+  set : ∀ {Γ Δ} → (ρ : Type) → Term Δ {-ρ-} → Subst Γ Δ → Subst (ρ ∷ Γ) Δ
+  set ρ U γ = U ∷ γ
+
+  ↑ : (Γ : Context) → (ρ : Type) → Subst Γ (ρ ∷ Γ)
+  ↑ Γ ρ = identity' (single ρ) Γ
+  
+  bind : ∀ {Γ Δ} → Subst Γ Δ → Term Γ → Term Δ
+  bind γ (var j) = subvar γ j
+  bind γ (⇒-intr ρ τ M) = ⇒-intr ρ τ (bind (skip ρ γ) M)
+  bind γ (⇒-elim ρ τ N M) = ⇒-elim ρ τ (bind γ N) (bind γ M)
+  bind γ (N-elim ρ N₀ Nₛ M) = N-elim ρ (bind γ N₀) (bind (skip ρ γ) Nₛ) (bind γ M) 
+  bind γ N-zero = N-zero
+  bind γ (N-succ M) = N-succ (bind γ M)
+  
+  subst : ∀ {Γ} → (ρ : Type) → Term Γ → Term (ρ ∷ Γ) → Term Γ
+  subst {Γ} ρ N M = bind (N ∷ identity Γ) M
+
+  compose' : ∀ {Γ Δ Ω} → Subst Δ Ω → Subst Γ Δ → Subst Γ Ω
+  compose' γ₁ γ₂ = mapAll (bind γ₁) γ₂
+
+  lem-bind-identity : (Γ : Context) → (M : Term Γ) → bind (identity Γ) M ≡ M
+  lem-bind-identity = {!!}
+  -}
+
+  Subst% : (Γ Δ : Context) → Set
+  Subst% Γ Δ = Elem Γ → Term Δ
+
+  identity% : (Γ : Context) → Subst% Γ Γ
+  identity% Γ = \i → var i
+
+  set% : ∀ {Γ Δ} → (ρ : Type) → Term Δ → Subst% Γ Δ → Subst% (ρ ∷ Γ) Δ
+  set% ρ U γ here = U
+  set% ρ U γ (there i) = γ i
+
+  up'% : ∀ {Γ} → (ρ : Type) → Subst% Γ (ρ ∷ Γ)
+  up'% ρ = \i → var (there i)
+
+  up% : ∀ {Γ Δ} → (ρ : Type) → Subst% Γ Δ → Subst% Γ (ρ ∷ Δ)
+  up% ρ γ = \i → mapTerm there (γ i)
+
+  {-
+  fish% : ∀ {Γ Δ Ω} → Subst% Δ Ω → Subst% Γ Δ → Subst% Γ Ω
+  fish% γ₁ γ₂ = \i → bind γ₁ (γ₂ i)
+  -}
+
+  _~%_ : {Γ Δ : Context} → (γ₁ γ₂ : Subst% Γ Δ) → Set
+  γ₁ ~% γ₂ = ∀ i → γ₁ i ≡ γ₂ i
+
+  Subst : Context → Context → Set
+  Subst Γ Δ = All (\ρ → Term Δ) Γ
+
+  subvar : ∀ {Γ Δ} → Subst Γ Δ → Elem Γ → Term Δ
+  subvar (U ∷ γ) here = U
+  subvar (U ∷ γ) (there i) = subvar γ i
+
+  identity : (Γ : Context) → Subst Γ Γ
+  identity Γ = {!!}
+
+  set : ∀ {Γ Δ} → (ρ : Type) → Term Δ → Subst Γ Δ → Subst (ρ ∷ Γ) Δ
+  set ρ U γ = {!!}
+
+  up' : ∀ {Γ} → (ρ : Type) → Subst Γ (ρ ∷ Γ)
+  up' ρ = {!!}
+
+  up : ∀ {Γ Δ} → (ρ : Type) → Subst Γ Δ → Subst Γ (ρ ∷ Δ)
+  up ρ γ = mapAll (tsucc ρ) γ
+
+  _~_ : {Γ Δ : Context} → (γ₁ γ₂ : Subst Γ Δ) → Set
+  γ₁ ~ γ₂ = {!!}
+
+  skip : ∀ {Γ Δ} → (ρ : Type) → Subst Γ Δ → Subst (ρ ∷ Γ) (ρ ∷ Δ)
+  skip ρ γ = set ρ (var here) (up ρ γ)
+  
+  bind : {Γ Δ : Context} → Subst Γ Δ → Term Γ → Term Δ
+  bind γ (var i) = subvar γ i
+  bind γ (⇒-intr ρ τ M) = ⇒-intr ρ τ (bind (skip ρ γ) M)
+  bind γ (⇒-elim ρ τ N M) = ⇒-elim ρ τ (bind γ N) (bind γ M)
+  bind γ (N-elim ρ N₀ Nₛ M) = N-elim ρ (bind γ N₀) (bind (skip ρ γ) Nₛ) (bind γ M)
+  bind γ N-zero = N-zero
+  bind γ (N-succ M) = N-succ (bind γ M)
+
+  fish : ∀ {Γ Δ Ω} → Subst Δ Ω → Subst Γ Δ → Subst Γ Ω
+  fish γ₁ γ₂ = {!!}
+
+  subst : ∀ {Γ} → (ρ : Type) → Term Γ → Term (ρ ∷ Γ) → Term Γ
+  subst {Γ} ρ N M = bind (set ρ N (identity Γ)) M
+
+
+-- Red
+module _ where
+  data Red {Γ : Context} : Term Γ → Term Γ → Set where
+    ⇒-elim-red : ∀ {ρ τ} N M → Red (⇒-elim ρ τ N (⇒-intr ρ τ M)) (subst ρ N M)
+    N-elim-zero-red : ∀ {ρ} N₀ Nₛ → Red (N-elim ρ N₀ Nₛ N-zero) N₀
+    N-elim-succ-red : ∀ {ρ} N₀ Nₛ M → Red (N-elim ρ N₀ Nₛ (N-succ M)) (subst ρ (N-elim ρ N₀ Nₛ M) Nₛ)
+  
+    ⇒-intr-red : ∀ {ρ τ M M'} → Red M M' → Red (⇒-intr ρ τ M) (⇒-intr ρ τ M')
+    ⇒-elim-N-red : ∀ {ρ τ N N'} → (M : Term Γ) → Red N N' → Red (⇒-elim ρ τ N M) (⇒-elim ρ τ N' M)
+    ⇒-elim-M-red : ∀ {ρ τ M M'} → (N : Term Γ) → Red M M' → Red (⇒-elim ρ τ N M) (⇒-elim ρ τ N M')
+    N-succ-red : ∀ {M M'} → Red M M' → Red (N-succ M) (N-succ M')
+
+  ⇒-elim-red' : ∀ {Γ Δ} → (γ : Subst Γ Δ) → ∀ {ρ τ} N M → Red (bind γ (⇒-elim ρ τ N (⇒-intr ρ τ M))) (bind (set ρ (bind γ N) γ) M)
+  ⇒-elim-red' γ {ρ = ρ} N M = {!⇒-elim-red (bind γ N) (bind (skip ρ γ) M)!}
+  
+  lem-subst-red : ∀ {Γ Δ} → (γ : Subst Γ Δ) → {M M' : Term Γ} → Red M M' → Red (bind γ M) (bind γ M')
+  lem-subst-red γ r = {!⇒-elim-red' γ N M!}
+
+
+-- SN
+module _ where
+  data SN {Γ : Context} (M : Term Γ) : Set where
+    mkSN : ((M' : Term Γ) → Red M M' → SN M') → SN M
+  
+  sn-zero : ∀ {Γ} → SN {Γ} N-zero
+  sn-zero = mkSN \M' ()
+  
+  sn-succ : ∀ {Γ} → (M : Term Γ) → SN M → SN (N-succ M)
+  sn-succ M (mkSN sM) = mkSN (\succM' → \{ (N-succ-red {M' = M'} r) → sn-succ M' (sM M' r)})
+
+
+-- Val
+module _ where
+  TypeVal' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set
+  TypeVal' Γ (ρ ⇒ τ) M = (U : Term Γ) → TypeVal' Γ ρ U → TypeVal' Γ τ (⇒-elim ρ τ U M)
+  TypeVal' Γ Nat M = SN M
+
+  prepend : ∀ {Γ} Ω → Term Γ → Term (Ω ++ Γ)
+  prepend = {!!}
+
+  TypeVal'' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set
+  TypeVal'' Γ (ρ ⇒ τ) M = (Ω : Context) → (U : Term (Ω ++ Γ)) → TypeVal'' (Ω ++ Γ) ρ U → TypeVal'' (Ω ++ Γ) τ (⇒-elim ρ τ U (prepend Ω M))
+  TypeVal'' Γ Nat M = SN M
+
+{-
+  tvmapsucc : {Γ : Context} → (ρ : Type) → (τ : Type) → (M : Term Γ) → TypeVal' Γ τ M → TypeVal' (ρ ∷ Γ) τ (mapvar (fsucc ρ) M)
+  tvmapsucc ρ (σ ⇒ τ) M vM = {!!}
+  tvmapsucc ρ Nat M vM = {!!}
+  -}
+  
+  cr2 : ∀ {Γ} → (τ : Type) → (M M' : Term Γ) → Red M M' → TypeVal' Γ τ M → TypeVal' Γ τ M'
+  cr2 (ρ ⇒ τ) M M' r vM = \N vN → cr2 τ (⇒-elim ρ τ N M) (⇒-elim ρ τ N M') (⇒-elim-M-red N r) (vM N vN)
+  cr2 Nat M M' r (mkSN sM) = sM M' r
+  
+  cr2' : ∀ {Γ} → (τ : Type) → (M M' : Term Γ) → Red M M' → TypeVal'' Γ τ M → TypeVal'' Γ τ M'
+  cr2' (ρ ⇒ τ) M M' r vM = \Ω N vN → cr2' τ (⇒-elim ρ τ N (prepend Ω M)) (⇒-elim ρ τ N (prepend Ω M')) (⇒-elim-M-red N {!lem-subst-red γ r!}) (vM Ω N vN)
+  cr2' Nat M M' r (mkSN sM) = sM M' r
+  
+  data Neutral {Γ} : Term Γ → Set where
+    n-var : ∀ {i} → Neutral (var i)
+    n-⇒-elim : ∀ {ρ τ N M} → Neutral (⇒-elim ρ τ N M)
+  
+  mutual
+    cr3 : ∀ {Γ} → (τ : Type) → (M : Term Γ) → Neutral M → ((M' : Term Γ) → Red M M' → TypeVal' Γ τ M') → TypeVal' Γ τ M
+    cr3 (ρ ⇒ τ) M nM vrM = \U vU → lem ρ τ M nM vrM U vU (cr1 ρ U vU)
+      where
+        lem : ∀ {Γ} ρ τ → (M : Term Γ) → (nM : Neutral M) → (vrM : (M' : Term Γ) → Red M M' → TypeVal' Γ (ρ ⇒ τ) M') → (U : Term Γ) → TypeVal' Γ ρ U → SN U → TypeVal' Γ τ (⇒-elim ρ τ U M)
+        lem ρ τ M nM vrM U vU (mkSN sU) = cr3 τ (⇒-elim ρ τ U M) n-⇒-elim \K → \
+          { (⇒-elim-N-red {N' = U'} M r) → lem ρ τ M nM vrM U' (cr2 ρ U U' r vU) (sU U' r)
+          ; (⇒-elim-M-red {M' = M'} N r) → vrM M' r U vU
+          }
+    cr3 Nat M nM vrM = mkSN vrM
+    
+    cr1 : ∀ {Γ} → (τ : Type) → (M : Term Γ) → TypeVal' Γ τ M → SN M
+    cr1 {Γ} (ρ ⇒ τ) M vM = {!lem ρ τ $0 (tsucc ρ M) (cr1 τ (⇒-elim ρ τ $0 (tsucc ρ M)) (vM $0 (cr3 ρ $0 n-var (\M' ()))))!}
+      where
+        $0 : Term (ρ ∷ Γ)
+        $0 = var here
+
+        lem : ∀ {Γ} ρ τ → (N M : Term Γ) → SN (⇒-elim ρ τ N M) → SN M
+        lem ρ τ N M (mkSN s) = mkSN \M' r → lem ρ τ N M' (s (⇒-elim ρ τ N M') (⇒-elim-M-red N r))
+    cr1 Nat M sM = sM
+
+  neutral-prepend : ∀ {Γ} Ω → (M : Term Γ) → Neutral M → Neutral (prepend Ω M)
+  neutral-prepend = {!!}
+  
+  mutual
+    cr3' : ∀ {Γ} → (τ : Type) → (M : Term Γ) → Neutral M → ((M' : Term Γ) → Red M M' → TypeVal'' Γ τ M') → TypeVal'' Γ τ M
+    cr3' {Γ} (ρ ⇒ τ) M nM vrM = \Ω U vU → lem Ω U vU (cr1' ρ U vU)
+      where
+        lem : (Ω : Context) → (U : Term (Ω ++ Γ)) → TypeVal'' (Ω ++ Γ) ρ U → SN U → TypeVal'' (Ω ++ Γ) τ (⇒-elim ρ τ U (prepend Ω M))
+        lem Ω U vU (mkSN sU) with prepend Ω M | neutral-prepend Ω M
+        ... | M* | nM* = cr3' τ (⇒-elim ρ τ U (prepend Ω M)) n-⇒-elim \K → {!\
+          { (⇒-elim-N-red {N' = U'} M r) → lem Ω U' (cr2' ρ U U' r vU) (sU U' r)
+          ; (⇒-elim-M-red {M' = M'} N r) → {!vrM M' r U vU!}
+          }!}
+    cr3' Nat M nM vrM = mkSN vrM
+    
+    cr1' : ∀ {Γ} → (τ : Type) → (M : Term Γ) → TypeVal'' Γ τ M → SN M
+    cr1' {Γ} (ρ ⇒ τ) M vM = {!lem ρ τ $0 (tsucc ρ M) (cr1' τ (⇒-elim ρ τ $0 (tsucc ρ M)) (vM $0 (cr3' ρ $0 n-var (\M' ()))))!}
+      where
+        $0 : Term (ρ ∷ Γ)
+        $0 = var here
+
+        lem : ∀ {Γ} ρ τ → (N M : Term Γ) → SN (⇒-elim ρ τ N M) → SN M
+        lem ρ τ N M (mkSN s) = mkSN \M' r → lem ρ τ N M' (s (⇒-elim ρ τ N M') (⇒-elim-M-red N r))
+    cr1' Nat M sM = sM
+
+  data ContextVal' (Δ : Context) : (Γ : Context) → (γ : Subst Γ Δ) → Set where
+    ε : ContextVal' Δ ε ε
+    _∷_ : ∀ {Γ γ τ} {M : Term Δ} → TypeVal' Δ τ M → ContextVal' Δ Γ γ → ContextVal' Δ (τ ∷ Γ) (M ∷ γ)
+  
+  Vvar : ∀ Γ τ i → TypeVal' Γ τ (var i)
+  Vvar Γ τ i = cr3 _ _ n-var (\M ())
+
+  Vmapsucc : ∀ {Γ ρ τ M} → TypeVal' Γ τ M → TypeVal' (ρ ∷ Γ) τ (tsucc ρ M)
+  Vmapsucc = {!!}
+
+  CVmapsucc : ∀ {Γ Δ} → (ρ : Type) → (γ : Subst Γ Δ) → ContextVal' Δ Γ γ → ContextVal' (ρ ∷ Δ) Γ (up ρ γ)
+  CVmapsucc ρ ε ε = ε
+  CVmapsucc ρ (M ∷ γ) (vM ∷ vγ) = Vmapsucc vM ∷ CVmapsucc ρ γ vγ
+
+  CVid : (Γ : Context) → ContextVal' Γ Γ (identity Γ)
+  CVid ε = ε
+  CVid (ρ ∷ Γ) = Vvar (ρ ∷ Γ) ρ here ∷ CVmapsucc ρ (identity Γ) (CVid Γ)
+
+{-
+  lem1 : (Γ : Context) → (ρ τ : Type) → (M : Term (ρ ∷ Γ))
+       -- → ((U : Term) → TypeVal' ρ U → TypeVal' τ (subst U M))
+       → ((Δ : Context) → (γ : Subst (ρ ∷ Γ) Δ) → ContextVal' Δ (ρ ∷ Γ) γ → TypeVal' Δ τ (bind γ M))
+       → SN M
+       --→ ((U : Term) → TypeVal' ρ U → SN (subst U M))
+       → (Δ : Context) → (γ : Subst Γ Δ)
+       → (N : Term Δ) → (TypeVal' Δ ρ N) → SN N
+       --→ SN (subst N M)
+       → (K : Term Δ) → Red (⇒-elim ρ τ N (⇒-intr ρ τ (bind (skip ρ γ) M))) K
+       → TypeVal' Δ τ K
+  lem1 Γ ρ τ M vsM sM Δ γ N vN sN _ (⇒-elim-red _ _) = {!vsM (N ∷ ε) (vN ∷ ε Γ)!}
+  lem1 Γ ρ τ M vsM sM Δ γ N vN (mkSN sN) .(⇒-elim ρ τ N' (⇒-intr ρ τ _)) (⇒-elim-N-red {N' = N'} _ r)
+    = cr3 τ _ n-⇒-elim (\K' r' → lem1 Γ ρ τ M vsM sM Δ γ N' vN' (sN N' r) K' r')
     where
-      $x = var ρ ($ {!!} "x")
+      vN' : TypeVal' Δ ρ N'
+      vN' = cr2 ρ N N' r vN
+  lem1 Γ ρ τ M vsM (mkSN sM) Δ γ N vN sN .(⇒-elim ρ τ N (⇒-intr ρ τ _)) (⇒-elim-M-red _ (⇒-intr-red {M' = M'} r))
+    -- = cr3 τ _ n-⇒-elim (\K' r' → lem1 Γ ρ τ M' {!(\U vU → cr2 τ (subst U M) (subst U M') (lem-subst-red (U ∷ ε) r) {!vsM U vU!} )!} (sM M' r) N vN sN K' r')
+    = cr3 τ _ n-⇒-elim (\K' r' → {!!})
 
-      lem : ∀ ρ τ N M → SN (⇒-elim ρ τ N M) → SN M
-      lem ρ τ N M (mkSN s) = mkSN \M' r → lem ρ τ N M' (s (⇒-elim ρ τ N M') (⇒-elim-M-red N r))
-  cr1 Nat M sM = sM
+  abs-lem : (Γ : Context) → (ρ τ : Type)
+          → (M : Term (ρ ∷ Γ) {-τ-})
+          -- → ((U : Term{-ρ-}) → (vU : TypeVal' ρ U) → TypeVal' τ (subst U M))
+          → ((Δ : Context) → (γ : Subst (ρ ∷ Γ) Δ)
+          → (vγ : ContextVal' Δ (ρ ∷ Γ) γ) → TypeVal' Δ τ (bind γ M))
+          → (Δ : Context) → (γ : Subst Γ Δ) → (N : Term Δ) → (vN : TypeVal' Δ ρ N) → TypeVal' Δ τ (⇒-elim ρ τ N (⇒-intr ρ τ (bind (skip ρ γ) M)))
+  abs-lem Γ ρ τ M vsM Δ γ N vN = cr3 τ (⇒-elim ρ τ N (⇒-intr ρ τ (bind (skip ρ γ) M))) n-⇒-elim \K r → {!lem1 Γ ρ τ M vsM sM N vN sN K r !}
+    where
+      sM : SN M
+      sM = cr1 τ M {!vsM!}
+      -- sM = cr1 τ M (transport (TypeVal' τ) {!!} (vsM $0 (Vvar ρ zero)))
+      -- where $0 = var here
+  
+      sN : SN N
+      sN = cr1 ρ N vN
+      -}
+  
+  lem1' : (Γ : Context) → (ρ τ : Type)
+        → (M : Term (ρ ∷ Γ))
+        → ((U : Term Γ) → TypeVal' Γ ρ U → TypeVal' Γ τ (subst ρ U M))
+        → SN M
+        → (N : Term Γ) → (vN : TypeVal' Γ ρ N) → SN N
+        → (K : Term Γ) → Red (⇒-elim ρ τ N (⇒-intr ρ τ M)) K
+        → TypeVal' Γ τ K
+  lem1' Γ ρ τ M vsM sM N vN sN _ (⇒-elim-red _ _) = vsM N vN
+  lem1' Γ ρ τ M vsM sM N vN (mkSN sN) .(⇒-elim ρ τ N' (⇒-intr ρ τ _)) (⇒-elim-N-red {N' = N'} _ r)
+    = cr3 τ _ n-⇒-elim (\K' r' → lem1' Γ ρ τ M vsM sM N' vN' (sN N' r) K' r')
+    where
+      vN' : TypeVal' Γ ρ N'
+      vN' = cr2 ρ N N' r vN
+  lem1' Γ ρ τ M vsM (mkSN sM) N vN sN .(⇒-elim ρ τ N (⇒-intr ρ τ _)) (⇒-elim-M-red _ (⇒-intr-red {M' = M'} r))
+    -- = cr3 τ _ n-⇒-elim (\K' r' → lem1 Γ ρ τ M' {!(\U vU → cr2 τ (subst U M) (subst U M') (lem-subst-red (U ∷ ε) r) {!vsM U vU!} )!} (sM M' r) N vN sN K' r')
+    = cr3 τ _ n-⇒-elim (\K' r' → lem1' Γ ρ τ M' vsM' (sM M' r) N vN sN K' r')
+    where
+      vsM' : (U : Term Γ) → (vU : TypeVal' Γ ρ U) → TypeVal' Γ τ (subst ρ U M')
+      vsM' U vU = cr2 τ (subst ρ U M) (subst ρ U M') (lem-subst-red (set ρ U (identity Γ)) r) (vsM U vU)
+      
+  abs-lem' : (Γ : Context) → (ρ τ : Type)
+          → (M : Term (ρ ∷ Γ) {-τ-})
+          → TypeVal' (ρ ∷ Γ) τ M
+          → ((U : Term Γ {-ρ-}) → (vU : TypeVal' Γ ρ U) → TypeVal' Γ τ (subst ρ U M))
+          → (N : Term Γ) → (vN : TypeVal' Γ ρ N) → TypeVal' Γ τ (⇒-elim ρ τ N (⇒-intr ρ τ M))
+  abs-lem' Γ ρ τ M vM vsM N vN = cr3 τ (⇒-elim ρ τ N (⇒-intr ρ τ M)) n-⇒-elim \K r → lem1' Γ ρ τ M vsM sM N vN sN K r 
+    where
+      sM : SN M
+      sM = cr1 τ M vM
+  
+      sN : SN N
+      sN = cr1 ρ N vN
 
-lem1 : (ρ τ : Type) → (x : Var) → (M : Term)
-     → ((U : Term) → TypeVal' ρ U → TypeVal' τ (subst x U M))
-     → SN M
-     → (N : Term) → (TypeVal' ρ N) → SN N
-     → (K : Term) → Red (⇒-elim ρ τ N (⇒-intr ρ τ x M)) K
-     → TypeVal' τ K
-lem1 ρ τ x M vsM sM N vN sN _ (⇒-elim-red _ _ _) = vsM N vN
-lem1 ρ τ x M vsM sM N vN (mkSN sN) .(⇒-elim ρ τ N' (⇒-intr ρ τ x M)) (⇒-elim-N-red {N' = N'} _ r)
-  = cr3 τ _ n-⇒-elim (\K' r' → lem1 ρ τ x M vsM sM N' (cr2 ρ N N' r vN) (sN N' r) K' r')
-lem1 ρ τ x M vsM (mkSN sM) N vN sN .(⇒-elim ρ τ N (⇒-intr ρ τ x _)) (⇒-elim-M-red _ (⇒-intr-red {M' = M'} r))
-  = cr3 τ _ n-⇒-elim (\K' r' → lem1 ρ τ x M' (\U vU → cr2 τ (subst x U M) (subst x U M') (lem-subst-red (set x U empty) r) (vsM U vU) ) (sM M' r) N vN sN K' r')
+  vtsucc : ∀ {Γ} → (ρ τ : Type) → (M : Term Γ) → TypeVal' Γ τ M → TypeVal' (ρ ∷ Γ) τ (tsucc ρ M)
+  vtsucc ρ (τ ⇒ τ₁) M vM = \U vU → {!!}
+  vtsucc ρ Nat M vM = {!!}
 
-abs-lem : (ρ τ : Type)
-        → (x : Var) → (M : Term{-x:ρ⊢τ-})
-        → ((U : Term{-ρ-}) → (vU : TypeVal' ρ U) → TypeVal' τ (subst x U M))
-        → (N : Term) → (vN : TypeVal' ρ N) → TypeVal' τ (⇒-elim ρ τ N (⇒-intr ρ τ x M))
-        -- → TypeVal' (ρ ⇒ τ) (⇒-intr ρ τ x M)
-abs-lem ρ τ x M vsM N vN = cr3 τ (⇒-elim ρ τ N (⇒-intr ρ τ x M)) n-⇒-elim \K r → lem1 ρ τ x M vsM (cr1 τ M (transport (\K → TypeVal' τ K) (lem-subst-id x ρ M) (vsM (var ρ x) (cr3 _ _ n-var (\M ()))))) N vN (cr1 ρ N vN) K r 
+  vssucc : ∀ {Γ Δ} → (ρ : Type) → (γ : Subst Γ Δ) → ContextVal' Δ Γ γ → ContextVal' (ρ ∷ Δ) Γ (up ρ γ)
+  vssucc ρ .ε ε = ε
+  vssucc ρ .(_ ∷ _) (vM ∷ vγ) = vtsucc ρ _ _ vM ∷ (vssucc ρ _ vγ)
 
-sn-zero : SN N-zero
-sn-zero = mkSN \M' ()
+  vskip : ∀ {Γ Δ} → (ρ : Type) → (γ : Subst Γ Δ) → ContextVal' Δ Γ γ → ContextVal' (ρ ∷ Δ) (ρ ∷ Γ) (skip ρ γ)
+  vskip ρ γ vγ = Vvar (ρ ∷ _) ρ here ∷ {!!}
+  
+  TermVal' : (Γ : Context) → {τ : Type} → {M : Term Γ} → Valid Γ τ M → {Δ : Context} → (γ : Subst Γ Δ) → ContextVal' Δ Γ γ → TypeVal' Δ τ (bind γ M)
+  TermVal' ε (#var () τ h) ε ε
+  TermVal' _ (#var here τ here) (M ∷ γ) (vM ∷ vγ) = vM
+  TermVal' _ (#var (there i) τ (there h)) (_ ∷ γ) (_ ∷ vγ) = TermVal' _ (#var i τ h) γ vγ
+  -- TermVal' Γ (#⇒-intr ρ τ M #M) γ vγ = \N vN → abs-lem Γ ρ τ M (\Δ' γ' vγ' → TermVal' (ρ ∷ Γ) #M γ' vγ') _ γ N vN 
+  TermVal' Γ (#⇒-intr ρ τ M #M) {Δ} γ vγ = \N vN → abs-lem' Δ ρ τ (bind (skip ρ γ) M) (TermVal' (ρ ∷ Γ) #M (skip ρ γ) (vskip ρ γ vγ)) (\U vU → {!TermVal' (ρ ∷ Γ) #M (set ρ U γ) (vU ∷ vγ) !}) N vN 
+  TermVal' Γ (#⇒-elim ρ τ N #N M #M) γ vγ = TermVal' Γ #M γ vγ (bind γ N) (TermVal' Γ #N γ vγ)
+  TermVal' Γ #N-zero γ vγ = sn-zero
+  TermVal' Γ (#N-succ M #M) γ vγ = sn-succ (bind γ M) (TermVal' Γ #M γ vγ)
+  TermVal' Γ (#N-elim ρ N₀ #N₀ Nₛ #Nₛ M #M) γ vγ = {!TermVal' Γ #M γ vγ!}
 
-sn-succ : (M : Term) → SN M → SN (N-succ M)
-sn-succ M (mkSN sM) = mkSN (\succM' → \{ (N-succ-red {M' = M'} r) → sn-succ M' (sM M' r)})
 
--- TermVal' : {Γ : Context} → {τ : Type} → {M : Term} → Valid Γ τ M → (γ : CSubst Γ) → ContextVal' Γ γ → TypeVal' τ (asubst γ M)
-TermVal' : (Γ : Context) → {τ : Type} → {M : Term} → Valid Γ τ M → (γ : Subst) → ContextVal' Γ γ → TypeVal' τ (asubst γ M)
-TermVal' Γ (#var x τ h) γ vγ = {!!}
--- TermVal' (#llet ρ τ x N #N M #M) γ vγ = {!!}
-TermVal' Γ (#⇒-intr ρ τ x M #M) γ vγ = \U vU → {!TermVal' ? #M (set x U empty) !} -- abs-lem ρ τ x (asubst γ M) \U vU → transport (\T → TypeVal' τ T) {!!} (TermVal' {!!} #M {!!} {!!})
-TermVal' Γ (#⇒-elim ρ τ N #N M #M) γ vγ = TermVal' Γ #M γ vγ (asubst γ N) (TermVal' Γ #N γ vγ)
-TermVal' Γ #N-zero γ vγ = sn-zero
-TermVal' Γ (#N-succ M #M) γ vγ = sn-succ (asubst γ M) (TermVal' Γ #M γ vγ)
-TermVal' Γ (#N-elim ρ N₀ #N₀ x Nₛ #Nₛ M #M) γ vγ = {!TermVal' #M!}
+sn : (Γ : Context) → (τ : Type) → (M : Term Γ) → Valid Γ τ M → SN M
+sn Γ τ M #M = cr1 τ M (transport (TypeVal' Γ τ) {!lem-bind-identity Γ M!} (TermVal' Γ #M (identity Γ) (CVid Γ)))
