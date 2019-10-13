@@ -2,6 +2,16 @@ module _ where
 
 -- lib
 module _ where
+  record ⊤ : Set where
+    constructor tt
+
+  record _×_ (A B : Set) : Set where
+    constructor _,_
+    field
+      fst : A
+      snd : B
+  open _×_ public
+
   data ℕ : Set where
     zero : ℕ
     succ : ℕ → ℕ
@@ -380,13 +390,24 @@ module _ where
   extendNeutral α n-var = n-var
   extendNeutral α n-⇒-elim = n-⇒-elim
 
-  TypeVal' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set
-  TypeVal' Γ (ρ ⇒ τ) M = (Γ' : Context) → (α : Γ ≤ Γ') → (U : Term Γ') → TypeVal' Γ' ρ U → TypeVal' Γ' τ (⇒-elim ρ τ U (extendTerm α M))
-  TypeVal' Γ Nat M = SN M
+  mutual
+    TypeVal'' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set
+    TypeVal'' Γ (ρ ⇒ τ) M = (Γ' : Context) → (α : Γ ≤ Γ') → (U : Term Γ') → TypeVal' Γ' ρ U → TypeVal' Γ' τ (⇒-elim ρ τ U (extendTerm α M))
+    TypeVal'' Γ Nat M = SN M
+
+    -- TypeVal' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set 
+    -- TypeVal' Γ τ M = SN M × TypeVal'' Γ τ M
+    TypeVal' : (Γ : Context) → (τ : Type) → (M : Term Γ) → Set 
+    TypeVal' Γ τ M = TypeVal'' Γ τ M
   
   cr2 : ∀ {Γ} → (τ : Type) → (M M' : Term Γ) → Red M M' → TypeVal' Γ τ M → TypeVal' Γ τ M'
   cr2 (ρ ⇒ τ) M M' r vM = \Γ' α N vN → cr2 τ _ _ (⇒-elim-M-red N (extendRed α r)) (vM Γ' α N vN)
   cr2 Nat M M' r (mkSN sM) = sM M' r
+  {-
+  cr2 : ∀ {Γ} → (τ : Type) → (M M' : Term Γ) → Red M M' → TypeVal' Γ τ M → TypeVal' Γ τ M'
+  cr2 (ρ ⇒ τ) M M' r (mkSN sM , vM) = sM M' r , \Γ' α N vN → cr2 τ _ _ (⇒-elim-M-red N (extendRed α r)) (vM Γ' α N vN)
+  cr2 Nat M M' r (mkSN sM , n) = sM M' r , n
+  -}
   
   mutual
     cr3 : ∀ {Γ} → (τ : Type) → (M : Term Γ) → Neutral M → ((M' : Term Γ) → Red M M' → TypeVal' Γ τ M') → TypeVal' Γ τ M
@@ -398,7 +419,7 @@ module _ where
           { (⇒-elim-N-red {N' = U'} M r) → {!lem Γ' α U' (cr2 ρ U U' r vU) (sU U' r)!}
           ; (⇒-elim-M-red {M' = M*'} N r) → {!vrM!}
           }
-    cr3 Nat M nM vrM = mkSN vrM
+    cr3 Nat M nM vrM = mkSN (\M' r → vrM M' r)
   
     Vvar : ∀ Γ τ i → TypeVal' Γ τ (var i)
     Vvar Γ τ i = cr3 _ _ n-var (\M ())
@@ -418,6 +439,7 @@ module _ where
         lem : ∀ {Γ} ρ τ → (N M : Term Γ) → SN (⇒-elim ρ τ N M) → SN M
         lem ρ τ N M (mkSN s) = mkSN \M' r → lem ρ τ N M' (s (⇒-elim ρ τ N M') (⇒-elim-M-red N r))
     cr1 Nat M sM = sM
+  
 
   abs-lem-lem : (Γ : Context) → (ρ τ : Type)
               → (M : Term (ρ ∷ Γ))
@@ -474,7 +496,7 @@ module _ where
   ContextVal' Δ Γ γ = (i : Elem Γ) → (τ : Type) → Has Γ i τ → TypeVal' Δ τ (γ i)
 
   extendTypeVal : ∀ {Γ Γ' τ M} → (α : Γ ≤ Γ') → TypeVal' Γ τ M → TypeVal' Γ' τ (extendTerm α M)
-  extendTypeVal {τ = ρ ⇒ τ} {M = M} α vM = \Δ β U vU → transport (\z → TypeVal' Δ τ (⇒-elim ρ τ U z)) (elem1 β α M) (vM Δ (composeExt β α) U vU)
+  extendTypeVal {τ = ρ ⇒ τ} {M = M} α vM = {!\Δ β U vU → ? , transport (\z → TypeVal'' Δ τ (⇒-elim ρ τ U z)) (elem1 β α M) (vM Δ (composeExt β α) U vU)!}
     where
       elem1 : ∀ {Γ Δ Ω} → (β : Δ ≤ Ω) → (α : Γ ≤ Δ) → EqTermF (Ext⇛TermF (composeExt β α)) (composeTermF (Ext⇛TermF β) (Ext⇛TermF α))
       elem1 = {!!}
