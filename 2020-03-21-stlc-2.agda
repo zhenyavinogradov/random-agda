@@ -193,21 +193,15 @@ applyEnvCont vs (cl ∷ cont) = inr (applyEnvClosure vs cl ∷ cont)
 applyEnvCont (v ∷ ε) ε = inl v
 
 applyVCont : ∀ {τ ϕ} → Value τ → Cont (single τ) ϕ → Value ϕ + Cont ε ϕ
-applyVCont v cont = applyEnvCont (v ∷ ε)  cont
+applyVCont v cont = applyEnvCont (v ∷ ε) cont
 
 applyVSCont : ∀ {τ ϕ} → Value τ + Cont ε τ → Cont (single τ) ϕ → Value ϕ + Cont ε ϕ
 applyVSCont (inl v) cont = applyVCont v cont
 applyVSCont (inr cont') cont = inr (composeCont cont' cont)
 
-stepExprCont : ∀ {Γ τ ϕ} → Env Γ → Expr Γ τ → Cont (single τ) ϕ → Value ϕ + Cont ε ϕ
-stepExprCont env expr cont = applyVSCont (stepExpr env expr) cont
-
-stepTermCont : ∀ {Γ τ ϕ} → Env Γ → Term Γ τ → Cont (single τ) ϕ → Value ϕ + Cont ε ϕ
-stepTermCont env (ret x) cont = applyVCont (get env x) cont
-stepTermCont env (set expr term) cont = stepExprCont env expr ((env & term) ∷ cont)
-
 step : ∀ {ϕ} → Cont ε ϕ → Value ϕ + Cont ε ϕ
-step ((env & term) ∷ cont) = stepTermCont env term cont
+step ((env & ret x) ∷ cont) = applyVCont (get env x) cont
+step ((env & set expr term) ∷ cont) = applyVSCont (stepExpr env expr) ((env & term) ∷ cont)
 
 composeApplyEnvContIsCompose : ∀ {τs ϕ ϕ'} → (env : Env τs) → (cont1 : Cont τs ϕ) → (cont2 : Cont (single ϕ) ϕ') → applyVSCont (applyEnvCont env cont1) cont2 ≡ applyEnvCont env (composeCont cont1 cont2)
 composeApplyEnvContIsCompose env (cl ∷ cont1) cont2 = refl
@@ -221,16 +215,9 @@ composeApplyVSContIsCompose : ∀ {τ ϕ ϕ'} → (vs : VS τ) → (cont1 : Cont
 composeApplyVSContIsCompose (inl value) cont1 cont2 = composeApplyEnvContIsCompose (value ∷ ε) cont1 cont2
 composeApplyVSContIsCompose (inr cont') cont1 cont2 = cong inr (composeContIsCompose cont' cont1 cont2)
 
-composeStepExprContIsCompose : ∀ {Γ τ ϕ ϕ'} → (env : Env Γ) → (expr : Expr Γ τ) → (cont1 : Cont (single τ) ϕ) → (cont2 : Cont (single ϕ) ϕ') → applyVSCont (stepExprCont env expr cont1) cont2 ≡ stepExprCont env expr (composeCont cont1 cont2)
-composeStepExprContIsCompose env expr cont1 cont2 = composeApplyVSContIsCompose (stepExpr env expr) cont1 cont2
-
-composeStepTermContIsCompose : ∀ {ρs τ ϕ ϕ'} → (env : Env ρs) → (term : Term ρs τ) → (cont1 : Cont (single τ) ϕ) → (cont2 : Cont (single ϕ) ϕ') → applyVSCont (stepTermCont env term cont1) cont2 ≡ stepTermCont env term (composeCont cont1 cont2)
-composeStepTermContIsCompose env (ret x) ε cont2 = refl
-composeStepTermContIsCompose env (ret x) (x₁ ∷ cont1) cont2 = refl
-composeStepTermContIsCompose env (set expr term) cont1 cont2 = composeStepExprContIsCompose env expr ((env & term) ∷ cont1) cont2
-
 composeStepIsStepCompose : ∀ {τ ϕ} → (cont1 : Cont ε τ) → (cont2 : Cont (single τ) ϕ) → applyVSCont (step cont1) cont2 ≡ step (composeCont cont1 cont2)
-composeStepIsStepCompose ((env & term) ∷ cont1) cont2 = composeStepTermContIsCompose env term cont1 cont2
+composeStepIsStepCompose ((env & ret x) ∷ cont1) cont2 = composeApplyEnvContIsCompose (get env x ∷ ε) cont1 cont2
+composeStepIsStepCompose ((env & set expr term) ∷ cont1) cont2 = composeApplyVSContIsCompose (stepExpr env expr) ((env & term) ∷ cont1) cont2
 
 record PredVS (τ : Type) : Set₁ where
   constructor mkPredVS
@@ -431,12 +418,6 @@ normApplyVSCont {cont = closure@(_ & _) ∷ _} (normInl {value} norm-value) (goo
     good-closure' {ε} tt = good-closure (norm-value , tt)
 normApplyVSCont (normInr norm-cont') norm-cont = normInr (normComposeCont norm-cont' norm-cont)
 
-goodApplyVSCont : ∀ {τ ϕ vs cont} → NormVS {τ} vs → NormCont {single τ} {ϕ} cont → GoodVS (applyVSCont vs cont)
-goodApplyVSCont norm-vs norm-cont = goodNormVS (normApplyVSCont norm-vs norm-cont)
-
-goodStepExprCont : ∀ {Γ τ ρ expr env cont} → NormEnv {Γ} env → NormExpr {Γ} {τ} expr → NormCont {single τ} {ρ} cont → GoodVS (stepExprCont env expr cont)
-goodStepExprCont norm-env norm-expr norm-cont = goodApplyVSCont (normStepExpr norm-env norm-expr) norm-cont
-
 mutual
   normExpr : ∀ {Γ τ} → (expr : Expr Γ τ) → NormExpr expr
   normExpr (lambda ρs τ term) = normLambda (goodTerm term)
@@ -454,14 +435,17 @@ mutual
   goodAllTerms (term ∷ terms) = goodTerm term ∷ goodAllTerms terms
 
   goodTerm : ∀ {Γ τ} → (term : Term Γ τ) → GoodTerm term
-  goodTerm (ret x) {env} norm-env = nex {s = (env & ret x) ∷ ε} (fin {v = get env x} (getNormEnv norm-env x))
-  goodTerm (set expr term) {env} norm-env = nex {s = (env & set expr term) ∷ ε} (goodStepExprCont {cont = (env & term) ∷ ε} norm-env (normExpr expr) (good-closure ∷ ε))
+  goodTerm (ret x) {env} norm-env = nex (fin (getNormEnv norm-env x))
+  goodTerm (set expr term) {env} norm-env = nex (goodNormVS (normApplyVSCont (normStepExpr norm-env norm-expr) norm-cont))
     where
+      norm-expr : NormExpr expr
+      norm-expr = normExpr expr
+
       good-term : GoodTerm term
       good-term = goodTerm term
 
-      good-closure : GoodClosure (env & term)
-      good-closure norm-values = good-term (appendNormEnv norm-values norm-env)
+      norm-cont : NormCont ((env & term) ∷ ε)
+      norm-cont = (\norm-values → good-term (appendNormEnv norm-values norm-env)) ∷ ε
 
 result : ∀ {τ vc} → GoodVS {τ} vc → Value τ
 result (fin {v} _norm) = v
@@ -501,7 +485,7 @@ module Test where
     ret $0
 
   _ : Set
-  _ = {!eval (test 1 1)!}
+  _ = {!eval (test 2 1)!}
 
 {-
 module Extra where
