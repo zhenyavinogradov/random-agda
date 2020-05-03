@@ -36,9 +36,6 @@ module _ where
 
   _≡_ = Eq
 
-  Pred : Set → Set₁
-  Pred A = A → Set
-
   infixr 5 _∷_
   data List (A : Set) : Set where
     ε : List A
@@ -59,7 +56,6 @@ module _ where
   Has : {A : Set} → List A → A → Set
   Has as a = Any (Eq a) as
 
-
   data AllAll {A : Set} {P : A → Set} (P2 : ∀ {a} → P a → Set) : ∀ {as} → All P as → Set where
     ε : AllAll P2 ε
     _∷_ : ∀ {a as Pa Pas} → P2 Pa → AllAll P2 {as} Pas → AllAll P2 {a ∷ as} (Pa ∷ Pas)
@@ -73,6 +69,9 @@ module _ where
 
   data AllΣ {A : Set} {B : A → Set} (AllB : ∀ {a} → B a → Set) : Σ A B → Set where
     _,,_ : ∀ a {b : B a} → AllB b → AllΣ AllB (a ,, b)
+
+  Pred : Set → Set₁
+  Pred A = A → Set
 
   transport : {A : Set} → (P : A → Set) → ∀ {a a'} → a ≡ a' → P a → P a'
   transport P refl Pa = Pa
@@ -100,16 +99,22 @@ module _ where
   succc* f (c ∷ cs) (here x) = here x
   succc* f (c ∷ cs) (there x) = there (succc* f cs x)
 
-  $0 : ∀ {A a0 as} → Has {A} (a0 ∷ as) a0
-  $1 : ∀ {A a0 a1 as} → Has {A} (a0 ∷ a1 ∷ as) a1
-  $2 : ∀ {A a0 a1 a2 as} → Has {A} (a0 ∷ a1 ∷ a2 ∷ as) a2
-  $3 : ∀ {A a0 a1 a2 a3 as} → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ as) a3
-  $4 : ∀ {A a0 a1 a2 a3 a4 as} → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ a4 ∷ as) a4
+  $0 : ∀ {A a0 as}                      → Has {A} (a0 ∷ as) a0
+  $1 : ∀ {A a0 a1 as}                   → Has {A} (a0 ∷ a1 ∷ as) a1
+  $2 : ∀ {A a0 a1 a2 as}                → Has {A} (a0 ∷ a1 ∷ a2 ∷ as) a2
+  $3 : ∀ {A a0 a1 a2 a3 as}             → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ as) a3
+  $4 : ∀ {A a0 a1 a2 a3 a4 as}          → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ a4 ∷ as) a4
+  $5 : ∀ {A a0 a1 a2 a3 a4 a5 as}       → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ a4 ∷ a5 ∷ as) a5
+  $6 : ∀ {A a0 a1 a2 a3 a4 a5 a6 as}    → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ a4 ∷ a5 ∷ a6 ∷ as) a6
+  $7 : ∀ {A a0 a1 a2 a3 a4 a5 a6 a7 as} → Has {A} (a0 ∷ a1 ∷ a2 ∷ a3 ∷ a4 ∷ a5 ∷ a6 ∷ a7 ∷ as) a7
   $0 = here refl
   $1 = there $0
   $2 = there $1
   $3 = there $2
   $4 = there $3
+  $5 = there $4
+  $6 = there $5
+  $7 = there $6
 
   single' : {A : Set} {P : A → Set} {a : A} → P a → All P (single a)
   single' Pa = Pa ∷ ε
@@ -372,8 +377,14 @@ module _ where
   #lambda : ∀ {Γ σ τ} → Term (σ ∷ Γ) τ → Term Γ (σ ⇒ τ)
   #lambda f = wrap (intr (intrArrow f))
 
+  &lambda* : ∀ {Γ σs τ} → Term (σs ++ Γ) τ → Term Γ (σs ⇒* τ)
+  &lambda* f = wrap (intr (intrArrow f))
+
   &apply : ∀ {Γ σ τ} → Term Γ (σ ⇒ τ) → Term Γ σ → Term Γ τ
   &apply f a = wrap (elim f (elimArrow (a ∷ ε)))
+
+  &apply* : ∀ {Γ σs τ} → Term Γ (σs ⇒* τ) → All (Term Γ) σs → Term Γ τ
+  &apply* f as = wrap (elim f (elimArrow as))
   
   &inl : ∀ {Γ σ τ} → Term Γ σ → Term Γ (#Either σ τ)
   &inl value = wrap (intr (intrSum (here value)))
@@ -402,8 +413,8 @@ module _ where
   #zero : ∀ {Γ} → Term Γ #Nat
   #zero = wrap (intr (intrNat (&inl #unit)))
   
-  #succ : ∀ {Γ} → Term Γ #Nat → Term Γ #Nat
-  #succ n = wrap (intr (intrNat (&inr n)))
+  &succ : ∀ {Γ} → Term Γ #Nat → Term Γ #Nat
+  &succ n = wrap (intr (intrNat (&inr n)))
   
   #nil : ∀ {Γ τ} → Term Γ (#List τ)
   #nil = wrap (intr (intrList (&inl #unit)))
@@ -494,48 +505,6 @@ module _ where
   pure : ∀ {Γ τ} → ExprM Γ τ → TermM Γ τ
   pure expr = set _ expr (return $0)
 
-  {-
-  combine2' : ∀ {Γ ρ τ} → TermM Γ ρ → TermM (ρ ∷ Γ) τ → TermM Γ τ
-  combine2' (return x) term2 = mapTermM (sterm x) term2
-  combine2' (set ρ x term1) term2 = set ρ x (combine2 term1 (mapTermM sterma term2))
-
-  combine : ∀ {Γ τ} → ∀ cs → ∀ {ρs} → All (TermM Γ) ρs → ExprF (TermMAbs Γ) (Has (ρs ++ cs)) τ → TermM Γ τ
-  combine cs ε expr = pure (mapExprF identity {!!} expr)
-  combine cs (term ∷ terms) expr = combine2 term {!!}
-  -}
-
-  {-
-    Abs T Γ ρs τ = T (ρs ++ Γ) τ
-
-    Term = μT. λΓτ. Has Γ + ExprF (Abs T Γ) (T Γ)
-    TermM = μT. λΓτ. Has Γ + (ρ : Type) × ExprF (Abs T Γ) (Has Γ) × T (ρ ∷ Γ) τ
-    
-    ExprF (Abs Term Γ) (Term Γ) τ → ExprF (Abs TermM Γ) (TermM Γ) τ
-    
-    ExprF %F %V τ → (ρs : List Type) × All %V ρs × ExprF %F (Has ρs) τ
-    EpxrF %F %V τ → Linear %F %V τ
-
-    (ρs : List Type) × All (TermM Γ) ρs × ExprF (Abs TermM Γ) (Has ρs) τ → TermM Γ τ
-    
-    ε : ExprF %F (Has Γ) τ → Linear Γ τ
-    _∷_ : %V ρ → Linear ρs τ → Linear (ρ ∷ ρs) τ
-
-    TermF ? (TermM Γ) τ → (Δ : List Type) × ExprF ? (Has Δ) τ
-    All (TermM Γ) τs
-  -}
-
-  {-
-  data Linear' {Ω : Set} (%V : List Ω → Ω → Set) (%E : List Ω → Set) : List Ω → Set where
-    ε : ∀ {ρs} → %E ρs → Linear' %V %E ρs
-    _∷_ : ∀ {ρ ρs} → %V ρs ρ → Linear' %V %E ρs → Linear' %V %E (ρ ∷ ρs)
-
-  LinearK : (%F : List Type → Type → Set) (%V : Type → Set) → Type → Set
-  LinearK %F %V τ = Linear' (\ρs ρ → %V ρ) (\ϕs → ExprF %F (Has ϕs) τ) ε
-
-  TermM' : (%F : List Type → Type → Set) → List Type → Type → Set
-  TermM' %F Γ τ = Linear' (\ρs ρ → ExprF (\ϕs ϕ → %F (ϕs ++ Γ) ϕ) (Has ρs) ρ) (\ρs → Has ρs τ) Γ
-  -}
-
   data Linear {Ω : Set} (%V : Ω → Set) (%E : List Ω → Set) : List Ω → Set where
     pureLinear : ∀ {ρs} → %E ρs → Linear %V %E ρs
     _∷_ : ∀ {ρ ρs} → %V ρ → Linear %V %E (ρ ∷ ρs) → Linear %V %E ρs
@@ -584,29 +553,7 @@ module _ where
     singleLinear' : ∀ {ρ} → %V ρ → %E (ρ ∷ ε) → Linear %V %E ε
     singleLinear' {ρ} v e = v ∷ pureLinear e
 
-  {-
-  -- [σs] ↦ %V ρ₁, %V ρ₂, …, %V ρₙ, %E ([ρₙ,…,ρ₁] ++ σs)
-  module _ {Ω : Set} {%V : Ω → Set} {%E : List Ω → Set} where
-    moveLinear' : ∀ σ {Γ ρ} → Linear %V (\ρs → %E (ρ ∷ ρs)) (σ ∷ Γ) → Linear %V %E (σ ∷ ρ ∷ Γ)
-    moveLinear' σ (pureLinear x) = pureLinear {!x!}
-    moveLinear' σ (_∷_ {σ'} x l) = x ∷ {!moveLinear' σ' l!}
-
-    -- moveLinear : ∀ {ρ} → Linear %V (\ρs → %E (ρ ∷ ρs)) ε → Linear %V %E (ρ ∷ ε)
-    -- moveLinear : ∀ Γ {ρ} → Linear %V (\ρs → %E (ρ ∷ ρs)) Γ → Linear %V %E (ρ ∷ Γ)
-    -- moveLinear : ∀ Γ {ρ} → Linear %V (\ρs → %E (ρ ∷ (Γ ++ ρs))) ε → Linear %V %E (ρ ∷ Γ)
-    ------moveLinear : ∀ Γ Δ → Linear %V (\ρs → %E (Δ ++ ρs)) Γ → Linear %V %E (Δ ++ Γ)
-    moveLinear : ∀ {ρ} → Linear %V (\ρs → %E (ρ ∷ ρs)) ε → Linear %V %E (ρ ∷ ε)
-    moveLinear (pureLinear x) = pureLinear x
-    --moveLinear (_∷_ {σ} x l) = x ∷ moveLinear' σ l 
-    moveLinear (_∷_ {σ} x l) = x ∷ {!!}
-
-    -- _∷_ : ∀ {ρ} → %V ρ → Linear' %V (\ρs → %E (ρ ∷ ρs)) → Linear' %V %E
-    appendLinear : ∀ {ρ} → %V ρ → Linear %V (\ρs → %E (ρ ∷ ρs)) ε → Linear %V %E ε
-    appendLinear v l = v ∷ moveLinear l
-    -}
-
   module _ {Ω : Set} {%V : Ω → Set} where
-    --anyLinear : ∀ {τs} → (g : Ω → Ω) → Any %V τs → Linear %V (\ρs → Any (\τ → Has ρs (g τ)) τs) ε
     anyLinear : ∀ {τs} → (g : Ω → Ω) → Any (\τ → %V (g τ)) τs → Linear %V (\ρs → Any (\τ → Has ρs (g τ)) τs) ε
     anyLinear g (here x) = x ∷ pureLinear (here $0)
     anyLinear g (there any-v) = mapLinear there (anyLinear g any-v)
@@ -622,19 +569,15 @@ module _ where
     linizeIntr (intrProduct r) = mapLinear intrProduct (allLinear identity r)
     linizeIntr (intrNat r)     = mapLinear intrNat (singleLinear' r $0)
     linizeIntr (intrList r)    = mapLinear intrList (singleLinear' r $0)
-    --linizeIntr (intrTree r)    = mapLinear intrTree (singleLinear' r $0)
     linizeIntr (intrConat (ρ ,, v , f)) = mapLinear intrConat (mapLinear (_,,_ ρ) (v ∷ f ∷ pureLinear ($1 , $0)))
     linizeIntr (intrStream (ρ ,, v , f)) = mapLinear intrStream (mapLinear (_,,_ ρ) (v ∷ f ∷ pureLinear ($1 , $0)))
 
-    --linizeElim : ∀ Γ {τ ϕ} → ElimF %V τ ϕ → Linear %V (\ρs → ElimF (Has (Γ ++ ρs)) τ ϕ) Γ
-    --linizeElim Γ rule = {!!}
     linizeElim : ∀ {τ ϕ} → ElimF %V τ ϕ → Linear %V (\ρs → ElimF (Has ρs) τ ϕ) ε
     linizeElim (elimArrow vs)   = mapLinear elimArrow (allLinear identity vs)
     linizeElim (elimSum {ϕ = ϕ} f) = mapLinear elimSum (allLinear (\τ → τ ⇒ ϕ) f)
     linizeElim (elimProduct f)  = mapLinear elimProduct (pureLinear f)
     linizeElim (elimNat value)  = mapLinear elimNat (singleLinear' value $0)
     linizeElim (elimList value) = mapLinear elimList (singleLinear' value $0)
-    --linizeElim (elimTree value) = mapLinear elimTree (singleLinear' value $0)
     linizeElim elimConat        = pureLinear elimConat
     linizeElim elimStream       = pureLinear elimStream
 
@@ -647,8 +590,6 @@ module _ where
     linizeExpr : ∀ {τ} → ExprF %F %V τ → Linear %V (\ρs → ExprF %F (Has ρs) τ) ε
     linizeExpr {τ} (intr rule) = apLinear (pureLinear (\τs r → intr (transport (\τs → IntrF %F (Has τs) τ) (lem++ε τs) r))) (linizeIntr rule)
     linizeExpr (elim {ϕ} value rule) = apLinear (apLinear (pureLinear \{ (σ ∷ ε) mkSinglePred τs r → elim (Has++l τs $0) (mapElimF (\i → Has++r i (ϕ ∷ ε)) r) }) (singleLinear value)) (linizeElim rule)
-    --linizeExpr (intr rule) = apLinear (pureLinear (\r → intr r)) (linizeIntr rule) --mapLinear intr (linizeIntr rule)
-    --linizeExpr (elim {ϕ} value rule) = apLinear (apLinear (pureLinear (\{ {σ ∷ ε} mkSinglePred {τs} r → elim (Has++l τs $0) r})) (singleLinear value)) (linizeElim rule)
 
   succc : {A : Set} {a : A} {as as' : List A} → (∀ {r} → Has as r → Has as' r) → (∀ {r} → Has (a ∷ as) r → Has (a ∷ as') r)
   succc f (here refl) = here refl
@@ -775,6 +716,22 @@ module _ where
     elim $2 (elimSum ($1 ∷ $0 ∷ ε)) ▸
     pure (elim $4 (elimArrow ($0 ∷ ε)))
 
+  elimListTerm' : ∀ {ϕ τ} → TermM (#Maybe (#Pair τ (#List τ)) ∷ (#Maybe (#Pair τ ϕ) ⇒ ϕ) ∷ ε) ϕ
+  elimListTerm' =
+    intr (intrArrow (
+      intr (intrProduct ε) ▸
+      pure (intr (intrSum (here $0)))
+    )) ▸
+    intr (intrArrow (
+      elim $0 (elimProduct $0) ▸
+      elim $1 (elimProduct $1) ▸
+      elim $0 (elimList $5) ▸
+      intr (intrProduct ($2 ∷ $0 ∷ ε)) ▸
+      pure (intr (intrSum (there (here $0))))
+    )) ▸
+    elim $2 (elimSum ($1 ∷ $0 ∷ ε)) ▸
+    pure (elim $4 (elimArrow ($0 ∷ ε)))
+
   elimListTerm : ∀ {τ ϕ} → TermM (#Maybe (#Pair τ (#List τ)) ∷ (#Maybe (#Pair τ ϕ) ⇒ ϕ) ∷ ε) ϕ
   elimListTerm = compile' (&apply (&compose $step (&mapMaybePair (&elimList $step))) $value) where
     $value = var $0
@@ -798,7 +755,7 @@ module _ where
   stepElimF (wrap (intrSum any-value))      (elimSum functions) = getAllAny (\function value → (function ∷ value ∷ ε) & compile' (&apply (var $0) (var $1))) functions any-value
   stepElimF (wrap (intrProduct values))     (elimProduct i)     = getAllAny stepElimProductF values i
   stepElimF (wrap (intrNat value))          (elimNat step)      = (value ∷ step ∷ ε) & elimNatTerm'
-  stepElimF (wrap (intrList value))         (elimList step)     = (value ∷ step ∷ ε) & {!!}
+  stepElimF (wrap (intrList value))         (elimList step)     = (value ∷ step ∷ ε) & elimListTerm'
   stepElimF (wrap (intrConat (ρ ,, v , s)))  elimConat          = (v ∷ s ∷ ε) & {!!}
   stepElimF (wrap (intrStream (ρ ,, v , s))) elimStream         = (v ∷ s ∷ ε) & {!!}
 
@@ -928,8 +885,6 @@ module _ where
     -}
   
     data Good-Nat : Value #Nat → Set where
-      --zero : Good-Nat #zero
-      --succ : {n : Value #Nat} → Good-Nat n → Good-Nat (#succ n)
       mkGood-Nat : {n : Value (#Maybe #Nat)} → Good-Maybe Good-Nat n → Good-Nat (wrap (intrNat n))
   
     {-
@@ -937,6 +892,8 @@ module _ where
       nil : Good-List %Good-τ #nil
       cons : {v : Value τ} {l : Value (#List τ)} → %Good-τ v → Good-List %Good-τ l → Good-List %Good-τ (#cons v l)
       -}
+    data Good-List {τ} (Good-τ : Val τ) : Value (#List τ) → Set where
+      mkGood-List : {n : Value (#Maybe (#Pair τ (#List τ)))} → Good-Maybe (Good-Pair Good-τ (Good-List Good-τ)) n → Good-List Good-τ (wrap (intrList n))
 
     {-
     module _ where
@@ -955,6 +912,7 @@ module _ where
     GoodValue {#Sum τs} = Good-Sum (AllGoodValue {τs})
     GoodValue {#Product τs} = Good-Product (AllGoodValue {τs})
     GoodValue {#Nat} = Good-Nat
+    GoodValue {#List τ} = Good-List (GoodValue {τ})
     --GoodValue {#List τ} = Good-List (GoodValue {τ})
     --GoodValue {#Conat} = Good-Conat
     --GoodValue {#Stream τ} = Good-Stream (GoodValue {τ})
@@ -1086,6 +1044,7 @@ module _ where
   goodStepIntrF {_} {intrNat value} all-good-rule = mkGood-Nat (to-Good-Maybe Good-Nat value all-good-rule) 
   goodStepIntrF {_} {intrProduct values} all-good = lem-All-Pred all-good
   goodStepIntrF {_} {intrSum any-value} any-good = lem-Any-Pred any-good
+  goodStepIntrF {_} {intrList value} good = mkGood-List (to-Good-Maybe (Good-Pair GoodValue (Good-List GoodValue)) value {!!})
   goodStepIntrF {_} {_} all-good-rule = {!!}
 
   goodStepIntr :
@@ -1170,32 +1129,49 @@ module _ where
   ∗_ : ∀ {τ} {machine : Machine τ} → TraceStep (step machine) → TraceStep (continue machine)
   ∗_ = goodContinue
 
-  traceElimNatTerm :
-    ∀ {ϕ} → (step : Value (#Maybe ϕ ⇒ ϕ)) → (value : Value (#Maybe #Nat)) → GoodValue step → Good-Maybe Good-Nat value
-    → TraceClosureε ((value ∷ step ∷ ε) & elimNatTerm')
-  traceElimNatTerm step (wrap (intrSum (here _))) good-step good-value = mkTraceClosureε (
-     {!!} --∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ {!!}
-     --goodContinue (goodContinue (goodContinue (goodContinue (goodContinue (goodContinue (goodContinue ({!!}
-     --))))))))
-   )
-  traceElimNatTerm step (wrap (intrSum (there (here nat)))) good-step good-value = mkTraceClosureε
-    {!!}
+  mutual
+    traceElimNatTerm :
+      ∀ {ϕ} → (step : Value (#Maybe ϕ ⇒ ϕ)) → (value : Value (#Maybe #Nat)) → GoodValue step → Good-Maybe Good-Nat value
+      → TraceClosureε ((value ∷ step ∷ ε) & elimNatTerm')
+    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (here _))) good-step good-value = mkTraceClosureε (
+       ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ (consTrace (mkTraceClosureε (good-step (ε ∷ ε))) \good-value' →
+       ∗ ◽ good-value')
+     )
+    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (there (here nat)))) good-step good-value = mkTraceClosureε (
+        ∗ ∗ ∗ ∗ (consTrace (goodStepElimF nat good-value (\{values} → good-step)) \good-value' →
+        ∗ ∗ ∗ ∗ (consTrace (mkTraceClosureε (good-step (good-value' ∷ ε))) \good-value'' →
+        ∗ ◽ good-value''))
+      )
 
-  goodStepElimF :
-    ∀ {τ ϕ} (value : Value τ) {rule : ElimF Value τ ϕ}
-    → GoodValue value → AllElimF GoodValue rule → TraceClosureε (stepElimF value rule)
-  goodStepElimF (wrap (intrArrow x)) {elimArrow x₁} trace-term good-values =
-    mkTraceClosureε (trace-term (lem-AllGoodValue-r good-values))
-  goodStepElimF (wrap (intrSum any-value)) {elimSum functions} any-good-value good-functions =
-    getAllAnyP TraceClosureε (\function value → apply function value)
-      functions any-value
-      good-functions (lem-Any-Pred-r any-good-value) (\{function value good-function good-value → trace-apply good-function good-value})
-  goodStepElimF (wrap (intrProduct values)) {elimProduct i} good-values t =
-    getAllAnyP {Q2 = \_ → ⊤} TraceClosureε stepElimProductF values i (lem-AllGoodValue good-values) (buildAllAny (\_ → tt) i) \{ value refl good-value t1 → mkTraceClosureε (goodFinish good-value) } 
-  goodStepElimF (wrap (intrNat value)) {elimNat step} (mkGood-Nat good-value) good-step =
-    traceElimNatTerm step value good-step good-value
-  goodStepElimF {_} {_} (_) {rule} good-env all-good-rule =
-    {!!}
+    traceElimListTerm :
+      ∀ {τ ϕ} → (step : Value (#Maybe (#Pair τ ϕ) ⇒ ϕ)) → (value : Value (#Maybe (#Pair τ (#List τ)))) → GoodValue step → Good-Maybe (Good-Pair GoodValue (Good-List GoodValue)) value
+      → TraceClosureε ((value ∷ step ∷ ε) & elimListTerm')
+    traceElimListTerm (wrap (intrArrow closure)) (wrap (intrSum (here _))) good-step good-value = mkTraceClosureε (
+       ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ (consTrace (mkTraceClosureε (good-step (ε ∷ ε))) \good-value' →
+       ∗ ◽ good-value')
+     )
+    traceElimListTerm (wrap (intrArrow closure)) (wrap (intrSum (there (here (wrap (intrProduct (t1 ∷ t2 ∷ ε))))))) good-step (good-t1 , good-t2 , tt) = mkTraceClosureε (
+        ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ consTrace (goodStepElimF t2 good-t2 (\{values} → good-step)) \good-value' →
+        ∗ ∗ ∗ ∗ ∗ consTrace (mkTraceClosureε (good-step ((good-t1 ∷ good-value' ∷ ε) ∷ ε))) \good-value'' →
+        ∗ ◽ good-value''
+      )
+
+    goodStepElimF :
+      ∀ {τ ϕ} (value : Value τ) {rule : ElimF Value τ ϕ}
+      → GoodValue value → AllElimF GoodValue rule → TraceClosureε (stepElimF value rule)
+    goodStepElimF (wrap (intrArrow x)) {elimArrow x₁} trace-term good-values =
+      mkTraceClosureε (trace-term (lem-AllGoodValue-r good-values))
+    goodStepElimF (wrap (intrSum any-value)) {elimSum functions} any-good-value good-functions =
+      getAllAnyP TraceClosureε (\function value → apply function value)
+        functions any-value
+        good-functions (lem-Any-Pred-r any-good-value)
+        \{ function value good-function good-value → trace-apply good-function good-value }
+    goodStepElimF (wrap (intrProduct values)) {elimProduct i} good-values t =
+      getAllAnyP {Q2 = \_ → ⊤} TraceClosureε stepElimProductF values i (lem-AllGoodValue good-values) (buildAllAny (\_ → tt) i) \{ value refl good-value t1 → mkTraceClosureε (goodFinish good-value) } 
+    goodStepElimF (wrap (intrNat value)) {elimNat step} (mkGood-Nat good-value) good-step =
+      traceElimNatTerm step value good-step good-value
+    goodStepElimF {_} {_} (_) {rule} good-env all-good-rule =
+      {!!}
  {-
       good-apply'' {c = mapMaybe (elimNatClosure step) value} good-step
         (traceMapMaybe (elimNatClosure step) value (traceElimNatClosure' step value good-step good-value))
@@ -1288,51 +1264,42 @@ evaluate : ∀ {τ} → Term ε τ → Value τ
 evaluate term = result (run (load (compile term)))
 
 module Test where
-  num : ∀ Γ → ℕ → TermM Γ #Nat
-  num Γ n =
-      intr (intrProduct ε) ▸
-      intr (intrSum (here $0)) ▸
-      intr (intrNat $0) ▸
-      go n
-    where
-      go : ∀ {Γ} → ℕ → TermM (#Nat ∷ Γ) #Nat
-      go zero = return $0
-      go (succ n) =
-        intr {-(#Maybe #Nat)-} (intrSum (there (here $0))) ▸
-        intr (intrNat $0) ▸
-        go n
-  
-  add : ∀ Γ → TermM (#Nat ∷ #Nat ∷ Γ) #Nat
-  add _ =
-    intr (intrArrow {ρs = #Unit ∷ ε} (return $2)) ▸
-    intr (intrArrow {ρs = #Nat ∷ ε} (
-      intr (intrSum (there (here $0))) ▸
-      pure (intr (intrNat $0))
-    )) ▸
-    intr (intrArrow {ρs = #Maybe #Nat ∷ ε} (
-      pure (elim $0 (elimSum ($2 ∷ $1 ∷ ε)))
-    )) ▸
-    elim $3 (elimNat $0) ▸
-    return $0
-  
-  -- stepn : {τ : Type} → ℕ → Machine τ → Step τ
-  -- stepn zero s = continue s
-  -- stepn (succ n) s with step s
-  -- … | finish v = finish v
-  -- … | continue s' = stepn n s'
-  
-  test : ℕ → ℕ → TermM ε #Nat
-  test n m =
-    intr (intrArrow (num _ n)) ▸
-    elim $0 (elimArrow ε) ▸
-    intr (intrArrow (num _ m)) ▸
-    elim $0 (elimArrow ε) ▸
-    intr (intrArrow {ρs = #Nat ∷ #Nat ∷ ε} (add _)) ▸
-    pure (elim $0 (elimArrow ($1 ∷ $3 ∷ ε)))
+  #add : Term ε ((#Nat ∷ #Nat ∷ ε) ⇒* #Nat)
+  #add = &lambda* (&foldNat (var $1) (#lambda (&succ (var $0))) (var $0))
 
+  #sum : Term ε (#List #Nat ⇒ #Nat)
+  #sum =
+    #lambda (&foldList
+      (#lambda (&maybe
+        (#lambda #zero)
+        (#lambda (&apply* (↑ ↑ ↑ #add) (&fst (var $0) ∷ &snd (var $0) ∷ ε)))
+        (var $0)
+      ))
+      (var $0))
+  
+  fromNat : ℕ → Term ε #Nat
+  fromNat zero = #zero
+  fromNat (succ n) = &succ (fromNat n)
+
+  fromList : ∀ {A τ} → (A → Term ε τ) → (List A → Term ε (#List τ))
+  fromList f ε = #nil
+  fromList f (a ∷ as) = #cons (f a) (fromList f as)
+  
   toNat : Value #Nat → ℕ
   toNat (wrap (intrNat (wrap (intrSum (here x))))) = zero
   toNat (wrap (intrNat (wrap (intrSum (there (here n)))))) = succ (toNat n)
+
+  toList : ∀ {A τ} → (Value τ → A) → (Value (#List τ) → List A)
+  toList f (wrap (intrList (wrap (intrSum (here x))))) = ε
+  toList f (wrap (intrList (wrap (intrSum (there (here (wrap (intrProduct (t ∷ l ∷ ε))))))))) = f t ∷ toList f l
+
+  test : ℕ → ℕ → Term ε #Nat
+  test n m = &apply* #add (fromNat n ∷ fromNat m ∷ ε)
+
+  test' : List ℕ → Term ε #Nat
+  test' l = &apply #sum (fromList fromNat l)
+
   
   _ : {!!}
-  _ = {!toNat (result (run' (test 9 5)))!}
+  --_ = {!toNat (result (run' (compile (test 3 21))))!}
+  _ = {!toNat (result (run' (compile (test' (ε)))))!}
