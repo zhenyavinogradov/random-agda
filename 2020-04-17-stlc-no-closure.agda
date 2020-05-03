@@ -275,7 +275,7 @@ module _ where
     mapElimF  elimStream        = elimStream
 
   module _
-      {%F1 %F2 : Type → Type → Set} (%mapF : ∀ {ρs τ} → %F1 ρs τ → %F2 ρs τ)
+      {%F1 %F2 : Type → Type → Set} (%mapF : ∀ {ρ τ} → %F1 ρ τ → %F2 ρ τ)
       {%V1 %V2 : Type → Set} (%mapV : ∀ {τ} → %V1 τ → %V2 τ)
     where
   
@@ -284,7 +284,7 @@ module _ where
     mapExprF (elim value rule) = elim (%mapV value) (mapElimF %mapV rule)
 
   module _
-      {%F : List Type → Type → Set} (%AllF : ∀ {ρs τ} → %F ρs τ → Set)
+      {%F : Type → Type → Set} (%AllF : ∀ {ρ τ} → %F ρ τ → Set)
       {%V : Type → Set} (%AllV : ∀ {τ} → %V τ → Set)
     where
     AllIntrF : ∀ {τ} → IntrF %F %V τ → Set
@@ -308,7 +308,7 @@ module _ where
     AllElimF  elimStream        = ⊤
 
   module _
-      {%F : List Type → Type → Set} (%AllF : ∀ {ρs τ} → %F ρs τ → Set)
+      {%F : Type → Type → Set} (%AllF : ∀ {ρ τ} → %F ρ τ → Set)
       {%V : Type → Set} (%AllV : ∀ {τ} → %V τ → Set)
     where
     data AllExprF : ∀ {τ} → ExprF %F %V τ → Set where
@@ -316,11 +316,11 @@ module _ where
       mkAllElim : ∀ {ρ τ} {value : %V ρ} {rule : ElimF %V ρ τ} → %AllV value → AllElimF %AllV rule → AllExprF (elim value rule)
 
   module _
-      {%F1 %F2 : List Type → Type → Set}
-      (%mapF : ∀ {ρs τ} → %F1 ρs τ → %F2 ρs τ)
-      (%AllF1 : ∀ {ρs τ} → %F1 ρs τ → Set)
-      (%AllF2 : ∀ {ρs τ} → %F2 ρs τ → Set)
-      (%allMapF : ∀ {ρs τ} {f1 : %F1 ρs τ} → %AllF1 f1 → %AllF2 (%mapF f1))
+      {%F1 %F2 : Type → Type → Set}
+      (%mapF : ∀ {ρ τ} → %F1 ρ τ → %F2 ρ τ)
+      (%AllF1 : ∀ {ρ τ} → %F1 ρ τ → Set)
+      (%AllF2 : ∀ {ρ τ} → %F2 ρ τ → Set)
+      (%allMapF : ∀ {ρ τ} {f1 : %F1 ρ τ} → %AllF1 f1 → %AllF2 (%mapF f1))
 
       {%V1 %V2 : Type → Set}
       (%mapV : ∀ {τ} → %V1 τ → %V2 τ)
@@ -372,13 +372,13 @@ module _ where
       var  : Has Γ τ → Term Γ τ
       wrap : ExprF (TermAbs Γ) (Term Γ) τ → Term Γ τ
   
-    TermAbs : List Type → (List Type → Type → Set)
-    TermAbs Γ σs τ = Term (σs ++ Γ) τ
+    TermAbs : List Type → (Type → Type → Set)
+    TermAbs Γ ρ τ = Term (ρ ∷ Γ) τ
 
   {-# TERMINATING #-}
   mapTerm : ∀ {Γ Δ} → (∀ {τ} → Has Γ τ → Has Δ τ) → (∀ {τ} → Term Γ τ → Term Δ τ)
   mapTerm f (var x) = var (f x)
-  mapTerm f (wrap expr) = wrap (mapExprF (\{ρs} → mapTerm (succc* f ρs)) (mapTerm f) expr)
+  mapTerm f (wrap expr) = wrap (mapExprF (\{ρ} → mapTerm (succc* f (ρ ∷ ε))) (mapTerm f) expr)
 
   #lambda : ∀ {Γ σ τ} → Term (σ ∷ Γ) τ → Term Γ (σ ⇒ τ)
   #lambda f = wrap (intr (intrArrow f))
@@ -493,8 +493,8 @@ module _ where
       return : Has Γ τ → TermM Γ τ
       set    : ∀ ρ → ExprF (TermMAbs Γ) (Has Γ) ρ → TermM (ρ ∷ Γ) τ → TermM Γ τ
 
-    TermMAbs : List Type → (List Type → Type → Set)
-    TermMAbs Γ σs τ = TermM (σs ++ Γ) τ
+    TermMAbs : List Type → (Type → Type → Set)
+    TermMAbs Γ σ τ = TermM (σ ∷ Γ) τ
 
   IntrM : List Type → Type → Set
   IntrM Γ τ = IntrF (TermMAbs Γ) (Has Γ) τ
@@ -569,7 +569,7 @@ module _ where
     allLinear g ε = pureLinear ε
     allLinear {τ ∷ τs} g (v ∷ all-v) = v ∷ mapLinear' (g τ ∷ ε) (\σs all-σs → Has++l σs $0 ∷ mapAll (\i → Has++r i (g τ ∷ ε)) all-σs) (allLinear g all-v)
 
-  module _ {%F : List Type → Type → Set} {%V : Type → Set} where
+  module _ {%F : Type → Type → Set} {%V : Type → Set} where
     linizeIntr : ∀ {τ} → IntrF %F %V τ → Linear %V (\ρs → IntrF %F (Has ρs) τ) ε
     linizeIntr (intrArrow f)   = mapLinear intrArrow (pureLinear f)
     linizeIntr (intrSum r)     = mapLinear intrSum (anyLinear identity r)
@@ -606,7 +606,7 @@ module _ where
   {-# TERMINATING #-}
   mapTermM : ∀ {Γ Δ τ} → (∀ {ϕ} → Has Γ ϕ → Has Δ ϕ) → (TermM Γ τ → TermM Δ τ)
   mapTermM f (return x) = return (f x)
-  mapTermM f (set ρ expr term) = set ρ (mapExprF (\{ρs} → mapTermM (succc* f ρs)) f expr) (mapTermM (succc f) term)
+  mapTermM f (set ρ expr term) = set ρ (mapExprF (\{ρ} → mapTermM (succc* f (ρ ∷ ε))) f expr) (mapTermM (succc f) term)
 
   sterm : {Γ : List Type} → ∀ {ρ τ} → Has Γ ρ → Has (ρ ∷ Γ) τ → Has Γ τ
   sterm i (here refl) = i
@@ -648,10 +648,13 @@ module _ where
 module _ where
   mutual
     data Value (τ : Type) : Set where
-      wrap : IntrF Closure Value τ → Value τ
+      wrap : IntrF Closure1 Value τ → Value τ
+
+    Closure1 : Type → Type → Set
+    Closure1 σ τ = Closure (single σ) τ
   
     data Closure (ρs : List Type) (τ : Type) : Set where
-      _&_ : ∀ {Γ} → Env Γ → TermMAbs Γ ρs τ → Closure ρs τ
+      _&_ : ∀ {Γ} → Env Γ → TermM (ρs ++ Γ) τ → Closure ρs τ
 
     Env : List Type → Set
     Env Γ = All Value Γ
@@ -685,26 +688,6 @@ module _ where
   apply : ∀ {ρ τ} → Value (ρ ⇒ τ) → Value ρ → Closure ε τ
   --apply function value = apply* function (value ∷ ε)
   apply {ρ} {τ} function value = (function ∷ value ∷ ε) & (elim $0 (elimArrow $1) ▸ return $0)
-
-  {-
-  mapMaybe : ∀ {σ τ} → Value (σ ⇒ τ) → Value (#Maybe σ) → Closure ε (#Maybe τ)
-  mapMaybe function value = (function ∷ value ∷ ε) & compile' (&apply (&apply #mapMaybe (var $0)) (var $1))
-
-  elimNatClosure : ∀ {ϕ} → Value (#Maybe ϕ ⇒ ϕ) → Value (#Nat ⇒ ϕ)
-  elimNatClosure step = wrap (intrArrow ((step ∷ ε) & pure (elim $0 (elimNat $1))))
-
-  apply'' : ∀ {σ τ} → Value (σ ⇒ τ) → Closure ε σ → Closure ε τ
-  apply'' {σ} {τ} function closure = (thunk ∷ function ∷ ε) &
-      ( elim $0 (elimArrow ε)
-      ▸ pure (elim $2 (elimArrow ($0 ∷ ε)))
-      )
-    where
-      thunk : Value (ε ⇒* σ)
-      thunk = wrap (intrArrow closure)
-      -}
-
-  --&apply : {!!}
-  --&apply = {!!}
 
   elimNatTerm : ∀ {ϕ} → TermM (#Maybe #Nat ∷ (#Maybe ϕ ⇒ ϕ) ∷ ε) ϕ
   elimNatTerm = compile' (&apply (&compose $step (&mapMaybe (&elimNat $step))) $value) where
@@ -771,7 +754,7 @@ module _ where
   stepElim : ∀ {Γ τ ϕ} → Env Γ → Has Γ τ → ElimM Γ τ ϕ → Closure ε ϕ
   stepElim env x rule = stepElimF (get env x) (mapElimF (\x → get env x) rule)
 
-  stepIntrF : ∀ {τ} → IntrF Closure Value τ → Value τ
+  stepIntrF : ∀ {τ} → IntrF Closure1 Value τ → Value τ
   stepIntrF rule = wrap rule
 
   stepIntr : ∀ {Γ τ} → Env Γ → IntrM Γ τ → Value τ
@@ -1050,7 +1033,7 @@ module _ where
   lem-Any-Pred (there allAny) = lem-Any-Pred allAny
 
   goodStepIntrF :
-    ∀ {τ} {rule : IntrF Closure Value τ}
+    ∀ {τ} {rule : IntrF Closure1 Value τ}
     → AllIntrF GoodClosure GoodValue rule → GoodValue (stepIntrF rule)
   --goodStepIntrF {_} {intrArrow .(_ & _)} (mkGoodClosure good-env good-term) = \good-values → good-term (lem-AllGoodValue good-values ++2 good-env)
   goodStepIntrF {_} {intrArrow .(_ & _)} (mkGoodClosure good-env good-term) = \good-value → good-term (good-value ∷ good-env)
