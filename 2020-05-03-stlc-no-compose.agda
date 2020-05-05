@@ -266,11 +266,11 @@ module _ where
   module _ {%F : Type → Type → Set} {%V : Type → Set} (%AllF : ∀ {ρ τ} → %F ρ τ → Set) (%AllV : ∀ {τ} → %V τ → Set) where
     data AllIntrF : ∀ {τ} → IntrF %F %V τ → Set where
       mkAllIntrArrow   : ∀ {ρ τ rule} → %AllF rule                   → AllIntrF (intrArrow {%F} {%V} {ρ} {τ} rule)
-      mkAllIntrSum     : ∀ {rule} → AllAny %AllV rule            → AllIntrF (intrSum rule)
-      mkAllIntrProduct : ∀ {rule} → AllAll %AllV rule            → AllIntrF (intrProduct rule)
+      mkAllIntrSum     : ∀ {τs rule} → AllAny %AllV rule            → AllIntrF (intrSum {%F} {%V} {τs} rule)
+      mkAllIntrProduct : ∀ {τs rule} → AllAll %AllV rule            → AllIntrF (intrProduct {%F} {%V} {τs} rule)
       mkAllIntrNat     : ∀ {rule} → %AllV rule                   → AllIntrF (intrNat rule)
       mkAllIntrConat   : ∀ {rule} → AllΣ (All× %AllV %AllV) rule → AllIntrF (intrConat rule)
-      mkAllIntrStream  : ∀ {rule} → AllΣ (All× %AllV %AllV) rule → AllIntrF (intrStream rule)
+      mkAllIntrStream  : ∀ {τ rule} → AllΣ (All× %AllV %AllV) rule → AllIntrF (intrStream {%F} {%V} {τ} rule)
 
   module _ {%V : Type → Set} (%AllV : ∀ {τ} → %V τ → Set) where
     AllElimF : ∀ {τ ϕ} → ElimF %V τ ϕ → Set
@@ -637,16 +637,8 @@ module _ where
   data Machine : Type → Set where
     _∷_ : ∀ {σ τ} → Thunk σ → CallStack σ τ → Machine τ
 
-  data Step (τ : Type) : Set where
-    finish   : Value τ → Step τ
-    continue : Machine τ → Step τ
-
   composeValueClosure : ∀ {σ τ} → Value σ → Closure σ τ → Thunk τ
   composeValueClosure value (env & term) = (value ∷ env) & term
-
-  composeValueStack : ∀ {σ τ} → Value σ → CallStack σ τ → Step τ
-  composeValueStack value ε = finish value
-  composeValueStack value (closure ∷ stack) = continue (composeValueClosure value closure ∷ stack)
 
   composeStackStack : ∀ {ρ σ τ} → CallStack ρ σ → CallStack σ τ → CallStack ρ τ
   composeStackStack ε stack2 = stack2
@@ -655,15 +647,24 @@ module _ where
   composeMachineStack : ∀ {σ τ} → Machine σ → CallStack σ τ → Machine τ
   composeMachineStack (thunk ∷ stack1) stack2 = thunk ∷ composeStackStack stack1 stack2
 
-  composeStepStack : ∀ {σ τ} → Step σ → CallStack σ τ → Step τ
-  composeStepStack (finish value) stack = composeValueStack value stack
-  composeStepStack (continue machine) stack = continue (composeMachineStack machine stack)
-
   load : ∀ {τ} → TermM ε τ → Machine τ
   load term = (ε & term) ∷ ε
 
 -- computation step
 module _ where
+  data Step (τ : Type) : Set where
+    finish   : Value τ → Step τ
+    continue : Machine τ → Step τ
+
+  composeValueStack : ∀ {σ τ} → Value σ → CallStack σ τ → Step τ
+  composeValueStack value ε = finish value
+  composeValueStack value (closure ∷ stack) = continue (composeValueClosure value closure ∷ stack)
+
+  composeStepStack : ∀ {σ τ} → Step σ → CallStack σ τ → Step τ
+  composeStepStack (finish value) stack = composeValueStack value stack
+  composeStepStack (continue machine) stack = continue (composeMachineStack machine stack)
+
+
   elimNatTerm : ∀ {ϕ} → TermM (#Maybe #Nat ∷ (#Maybe ϕ ⇒ ϕ) ∷ ε) ϕ
   elimNatTerm = compile (&apply (&compose $step (&mapMaybe (&elimNat $step))) $value) where
     $value = var $0
@@ -712,61 +713,39 @@ module _ where
   stepElimM : ∀ {Γ τ ϕ} → Env Γ → Has Γ τ → ElimM Γ τ ϕ → Thunk ϕ
   stepElimM env x rule = stepElimF (unwrapValue (get env x)) (mapElimF (\x → get env x) rule)
 
-  stepExprM : ∀ {Γ τ} → Env Γ → ExprM Γ τ → Step τ
-  stepExprM env (intr rule) = finish (stepIntrM env rule)
-  stepExprM env (elim x rule) = continue (stepElimM env x rule ∷ ε)
-
-  stepTermM : ∀ {Γ τ} → Env Γ → TermM Γ τ → Step τ
-  stepTermM env (return x) = finish (get env x)
-  stepTermM env (set ρ expr term) = composeStepStack (stepExprM env expr) ((env & term) ∷ ε)
-
-  stepThunk : ∀ {τ} → Thunk τ → Step τ
-  stepThunk (env & term) = stepTermM env term
-
   step : ∀ {τ} → Machine τ → Step τ
-  step (thunk ∷ stack) = composeStepStack (stepThunk thunk) stack
-
-  step' : ∀ {τ} → Machine τ → Step τ
-  step' ((env & return x) ∷ ε) = finish (get env x)
-  step' ((env & return x) ∷ (env' & term) ∷ stack) = continue (((get env x ∷ env') & term) ∷ stack)
-  step' ((env & (set σ (intr rule) cont)) ∷ stack) = continue (((value ∷ env) & cont) ∷ stack)
+  step ((env & return x) ∷ ε) = finish (get env x)
+  step ((env & return x) ∷ (env' & term) ∷ stack) = continue (((get env x ∷ env') & term) ∷ stack)
+  step ((env & (set σ (intr rule) cont)) ∷ stack) = continue (((value ∷ env) & cont) ∷ stack)
     where
       value : Value σ
       value = stepIntrM env rule
-  step' ((env & (set σ (elim x rule) cont)) ∷ stack) = continue ((thunk ∷ (env & cont) ∷ stack))
+  step ((env & (set σ (elim x rule) cont)) ∷ stack) = continue ((thunk ∷ (env & cont) ∷ stack))
     where
       thunk : Thunk σ
       thunk = stepElimM env x rule
 
 -- locality lemma
 module _ where
-  lem-composeStackStack :
-      ∀ {ϕ ρ σ τ} → (stack1 : CallStack ϕ ρ) → (stack2 : CallStack ρ σ) → (stack3 : CallStack σ τ)
-      → composeStackStack (composeStackStack stack1 stack2) stack3 ≡ composeStackStack stack1 (composeStackStack stack2 stack3)
-  lem-composeStackStack ε stack2 stack3 = refl
-  lem-composeStackStack (closure ∷ stack1) stack2 stack3 = cong (_∷_ closure) (lem-composeStackStack stack1 stack2 stack3)
-
-  lem-composeValueStack :
-      ∀ {ρ σ τ} → (value : Value ρ) → (stack1 : CallStack ρ σ) → (stack2 : CallStack σ τ)
-      → composeStepStack (composeValueStack value stack1) stack2 ≡ composeValueStack value (composeStackStack stack1 stack2)
-  lem-composeValueStack value ε stack2 = refl
-  lem-composeValueStack value (closure ∷ stack1) stack2 = cong continue refl
-
-  lem-composeMachineStack :
-      ∀ {ρ σ τ} → (machine : Machine ρ) → (stack1 : CallStack ρ σ) → (stack2 : CallStack σ τ)
-      → composeMachineStack (composeMachineStack machine stack1) stack2 ≡ composeMachineStack machine (composeStackStack stack1 stack2)
-  lem-composeMachineStack (thunk ∷ stack') stack1 stack2 = cong (_∷_ thunk) (lem-composeStackStack stack' stack1 stack2)
-
-  lem-composeStepStack :
-      ∀ {ρ σ τ} → (step : Step ρ) → (stack1 : CallStack ρ σ) → (stack2 : CallStack σ τ)
-      → composeStepStack (composeStepStack step stack1) stack2 ≡ composeStepStack step (composeStackStack stack1 stack2)
-  lem-composeStepStack (finish value) stack1 stack2 = lem-composeValueStack value stack1 stack2
-  lem-composeStepStack (continue machine) stack1 stack2 = cong continue (lem-composeMachineStack machine stack1 stack2)
-
   lem-step :
-      ∀ {σ τ} → (machine : Machine σ) → (stack2 : CallStack σ τ)
-      → composeStepStack (step machine) stack2 ≡ step (composeMachineStack machine stack2)
-  lem-step (thunk ∷ stack1) stack2 = lem-composeStepStack (stepThunk thunk) stack1 stack2
+      ∀ {σ τ} → (machine : Machine σ) → (stack : CallStack σ τ)
+      → composeStepStack (step machine) stack ≡ step (composeMachineStack machine stack)
+  lem-step ((env & return x) ∷ ε)                      ε = refl
+  lem-step ((env & return x) ∷ ε)                      ((env' & term') ∷ stack) = refl
+  lem-step ((env & return x) ∷ (env' & term') ∷ stack) stack' = refl
+  lem-step ((env & set ρ (intr rule) term) ∷ stack)    stack' = refl
+  lem-step ((env & set ρ (elim x rule) term) ∷ stack)  stack' = refl
+
+  {-
+  lem-step :
+      ∀ {σ τ} → (machine : Machine σ) → (stack : CallStack σ τ)
+      → step (composeMachineStack machine stack) ≡ composeStepStack (step machine) stack
+  lem-step ((env & return x) ∷ ε)                      ε = refl
+  lem-step ((env & return x) ∷ ε)                      ((env' & term') ∷ stack) = refl
+  lem-step ((env & return x) ∷ (env' & term') ∷ stack) stack' = refl
+  lem-step ((env & set ρ (intr rule) term) ∷ stack)    stack' = refl
+  lem-step ((env & set ρ (elim x rule) term) ∷ stack)  stack' = refl
+  -}
 
 
 -- run
@@ -793,7 +772,8 @@ module _ where
     goodContinue : {machine : Machine τ} → TraceStepF %Denotation (step machine) → TraceStepF %Denotation (continue machine)
 
   TraceThunkF : ∀ {τ} → (%Good-τ : Val τ) → Thunk τ → Set
-  TraceThunkF %Good-τ thunk = TraceStepF %Good-τ (stepThunk thunk)
+  --TraceThunkF %Good-τ thunk = TraceStepF %Good-τ (stepThunk thunk)
+  TraceThunkF %Good-τ thunk = TraceStepF %Good-τ (continue (thunk ∷ ε))
 
   -- good types
   module _ where
@@ -903,15 +883,23 @@ module _ where
     field getTraceMachine : TraceStep (step machine)
   open TraceMachine public
 
+  {-
   record TraceThunk {τ} (thunk : Thunk τ) : Set where
     constructor mkTraceThunk
-    field getTraceThunk : TraceStep (stepThunk thunk)
+    --field getTraceThunk : TraceStep (stepThunk thunk)
+    --field getTraceThunk : TraceStep (thunk ∷ ε)
+    field getTraceThunk : TraceStep (continue (thunk ∷ ε))
   open TraceThunk public
+  -}
 
   record TraceTermM {Γ τ} (term : TermM Γ τ) : Set where
     constructor mkTraceTermM
-    field getTraceTermM : {env : Env Γ} → AllAll Denotation env → TraceStep (stepTermM env term)
+    --field getTraceTermM : {env : Env Γ} → AllAll Denotation env → TraceStep ((env & term) ∷ ε)
+    field getTraceTermM : {env : Env Γ} → AllAll Denotation env → TraceStep (continue ((env & term) ∷ ε))
   open TraceTermM public
+
+  TraceThunk : ∀ {τ} → Thunk τ → Set
+  TraceThunk thunk = TraceStep (continue (thunk ∷ ε))
 
   TraceStack : ∀ {σ τ} → CallStack σ τ → Set
   TraceStack {σ} {τ} stack = {value : Value σ} → Denotation value → TraceStep (composeValueStack value stack)
@@ -922,29 +910,10 @@ module _ where
   data GoodClosure : ∀ {ρs τ} → Closure ρs τ → Set where
     mkGoodClosure : ∀ {Γ ρ τ} {env : Env Γ} {term : TermM (ρ ∷ Γ) τ} → GoodEnv env → TraceTermM term → GoodClosure (env & term)
 
-  data AllTraceStack (P : ∀ {ρ τ} → Closure ρ τ → Set) : ∀ {ρ τ} → CallStack ρ τ → Set where
-    ε   : ∀ {τ} → AllTraceStack P {τ} {τ} ε
-    _∷_ :
-      ∀ {ρ σ τ} {closure : Closure ρ σ} {stack : CallStack σ τ}
-      → P closure → AllTraceStack P stack → AllTraceStack P (closure ∷ stack)
-
-  GoodStack : ∀ {ρs τ} → CallStack ρs τ → Set
-  GoodStack = AllTraceStack GoodClosure
-
   composeDenotationGoodClosure :
     ∀ {σ τ} {value : Value σ} {closure : Closure σ τ}
     → Denotation value → GoodClosure closure → TraceThunk (composeValueClosure value closure)
-  composeDenotationGoodClosure good-value (mkGoodClosure good-env (mkTraceTermM trace-term)) = mkTraceThunk (trace-term (good-value ∷ good-env))
-
-  composeTraceStepGoodStack :
-    ∀ {σ τ} {step : Step σ} {stack : CallStack σ τ}
-    → TraceStep step → GoodStack stack → TraceStep (composeStepStack step stack)
-  composeTraceStepGoodStack (goodFinish good-value) ε = goodFinish good-value
-  composeTraceStepGoodStack (goodFinish good-value) (good-closure ∷ good-stack) = goodContinue (composeTraceStepGoodStack (getTraceThunk (composeDenotationGoodClosure good-value good-closure)) good-stack)
-  composeTraceStepGoodStack {stack = stack} (goodContinue {stack'} trace-stack') good-stack = goodContinue (transport TraceStep (lem-step stack' stack) (composeTraceStepGoodStack trace-stack' good-stack))
-
-  AllGoodExpr : ∀ {Γ τ} → ExprM Γ τ → Set
-  AllGoodExpr expr = AllExprF TraceTermM (\_ → ⊤) expr
+  composeDenotationGoodClosure good-value (mkGoodClosure good-env (mkTraceTermM trace-term)) = trace-term (good-value ∷ good-env)
 
   goodStepIntrF :
     ∀ {τ} {rule : IntrF Closure Value τ}
@@ -967,9 +936,8 @@ module _ where
   composeTraceStepTraceStack {step = finish _} {stack = closure ∷ stack} (goodFinish good-value) trace-stack = trace-stack good-value
   composeTraceStepTraceStack {step = continue step} {stack = stack} (goodContinue trace-step) trace-stack = goodContinue (transport TraceStep (lem-step step stack) (composeTraceStepTraceStack trace-step trace-stack))
 
-  consTrace : ∀ {σ τ} {thunk : Thunk σ} → {stack : CallStack σ τ} → TraceThunk thunk → TraceStack stack → TraceStep (continue (thunk ∷ stack))
-  --consTrace (mkTraceThunk trace-step) trace-stack = goodContinue (composeTraceStepTraceStack trace-step trace-stack)
-  consTrace (mkTraceThunk trace-step) trace-stack = goodContinue (composeTraceStepTraceStack trace-step trace-stack)
+  ▹ : ∀ {σ τ} {thunk : Thunk σ} → {stack : CallStack σ τ} → TraceThunk thunk → TraceStack stack → TraceStep (continue (thunk ∷ stack))
+  ▹ {thunk = thunk} {stack} (goodContinue trace-step) trace-stack = goodContinue (transport TraceStep (lem-step (thunk ∷ ε) stack) (composeTraceStepTraceStack trace-step trace-stack))
 
   ◽_ : ∀ {τ} {value : Value τ} → Denotation value → TraceStep (finish value)
   ◽_ = goodFinish
@@ -977,105 +945,76 @@ module _ where
   ∗_ : ∀ {τ} {machine : Machine τ} → TraceStep (step machine) → TraceStep (continue machine)
   ∗_ = goodContinue
 
+  traceStepElimSumF :
+    ∀ {τ ϕ} → (function : Value (τ ⇒ ϕ)) → (value : Value τ) → Denotation function → Denotation value
+    → TraceThunk (stepElimSumF function value)
+  traceStepElimSumF (wrap (intrArrow closure)) value good-function good-value = ∗ ▹ (good-function good-value) \good-value → ∗ ◽ good-value
+
+  traceStepElimProductF :
+    ∀ {τ ϕ} → (value : Value τ) → (eq : Eq ϕ τ) → Denotation value
+    → TraceThunk (stepElimProductF value eq)
+  traceStepElimProductF value refl good-value = ∗ ◽ good-value
+
   mutual
     traceElimNatTerm :
       ∀ {ϕ} → (step : Value (#Maybe ϕ ⇒ ϕ)) → (value : Value (#Maybe #Nat)) → Denotation step → DenotationMaybe DenotationNat value
       → TraceThunk ((value ∷ step ∷ ε) & elimNatTerm')
-    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (here _))) good-step good-value = mkTraceThunk (
-       ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ (consTrace (mkTraceThunk (good-step ε)) \good-value' →
-       ∗ ◽ good-value')
-     )
-    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (there (here nat)))) good-step good-value = mkTraceThunk (
-        ∗ ∗ ∗ ∗ ∗ {!consTrace!}
-        --∗ ∗ ∗ ∗ ∗ (consTrace (goodStepElimF nat good-value (\{values} → good-step)) \good-value' →
-        --∗ ∗ ∗ ∗ ∗ (consTrace (mkTraceThunk (good-step good-value')) \good-value'' →
-        --∗ ◽ good-value''))
-      )
+    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (here _))) good-step good-value =
+       ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ∗ ▹ (good-step ε) \good-value' →
+       ∗ ◽ good-value'
+    traceElimNatTerm (wrap (intrArrow closure)) (wrap (intrSum (there (here nat)))) good-step good-value =
+        ∗ ∗ ∗ ∗ ∗ ▹ (goodStepElimF nat good-value (\{values} → good-step)) \good-value' →
+        ∗ ∗ ∗ ∗ ▹ (good-step good-value') \good-value'' →
+        ∗ ◽ good-value''
 
     goodStepElimF :
       ∀ {τ ϕ} (value : Value τ) {rule : ElimF Value τ ϕ}
       → Denotation value → AllElimF Denotation rule → TraceThunk (stepElimF (unwrapValue value) rule)
     goodStepElimF (wrap (intrArrow x)) {elimArrow x₁} trace-term good-value =
       --mkTraceThunk (trace-term (lem-AllDenotation-r good-values))
-      mkTraceThunk (trace-term good-value)
+      trace-term good-value
     goodStepElimF (wrap (intrSum any-value)) {elimSum functions} any-good-value good-functions =
       --getAllAnyP TraceThunk (\function value → apply function value)
       getAllAnyP TraceThunk stepElimSumF
         functions any-value
         good-functions (lem-Any-Pred-r any-good-value)
-        \{ function value good-function good-value → {!!} }
+        \{ function value good-function good-value → traceStepElimSumF function value good-function good-value }
     goodStepElimF (wrap (intrProduct values)) {elimProduct i} good-values t =
-      getAllAnyP {Q2 = \_ → ⊤} TraceThunk stepElimProductF values i (lem-AllDenotation good-values) (buildAllAny (\_ → tt) i) \{ value refl good-value t1 → mkTraceThunk (goodFinish good-value) } 
+      getAllAnyP {Q2 = \_ → ⊤} TraceThunk stepElimProductF values i (lem-AllDenotation good-values) (buildAllAny (\_ → tt) i) \{ value refl good-value t1 → traceStepElimProductF value refl good-value } 
+      --{!!}
     goodStepElimF (wrap (intrNat value)) {elimNat step} (mkGood-Nat good-value) good-step =
       traceElimNatTerm step value good-step good-value
     goodStepElimF {_} {_} (_) {rule} good-env all-good-rule =
       {!!}
- {-
-      good-apply'' {c = mapMaybe (elimNatClosure step) value} good-step
-        (traceMapMaybe (elimNatClosure step) value (traceElimNatClosure' step value good-step good-value))
-        -}
 
   goodStepElim :
     ∀ {Γ τ ϕ} {env : Env Γ}
     → GoodEnv env → (x : Has Γ τ) →  (rule : ElimM Γ τ ϕ) → TraceThunk (stepElimM env x rule)
   goodStepElim {Γ} {τ} {ϕ} {env = env} good-env x rule = goodStepElimF {τ} {ϕ} _ (get2 good-env x) (allMapElimF (\x → get env x) (\_ → ⊤) Denotation (\{τ'} {x'} _ → get2 good-env x') rule (buildAllElim (\_ → tt) rule))
 
-  traceExprM : ∀ {Γ τ} {env : Env Γ} {expr : ExprM Γ τ} → GoodEnv env → AllGoodExpr expr → TraceStep (stepExprM env expr)
-  traceExprM {Γ} {τ} good-env (mkAllIntr all-intr) = goodFinish (goodStepIntr {Γ} {τ} good-env all-intr)
-  traceExprM good-env (mkAllElim {_} {_} {x} {rule} _ _) = goodContinue (composeTraceStepGoodStack (getTraceThunk (goodStepElim good-env x rule)) ε)
-
   mutual
     allGoodIntr : ∀ {Γ τ} → (rule : IntrM Γ τ) → AllIntrF TraceTermM (\_ → ⊤) rule
-    allGoodIntr (intrArrow term)   = mkAllIntrArrow (traceTermM term)
+    allGoodIntr (intrArrow term)   = mkAllIntrArrow (mkTraceTermM (\{env} good-env → ∗ getTraceMachine (traceMachine term env ε good-env \good-value → goodFinish good-value)))
     allGoodIntr (intrSum rule)     = mkAllIntrSum (buildAllAny (\_ → tt) rule)
     allGoodIntr (intrProduct rule) = mkAllIntrProduct (buildAllAll (\_ → tt) rule)
     allGoodIntr (intrNat rule)     = mkAllIntrNat tt
     allGoodIntr (intrConat rule)   = mkAllIntrConat (_ ,, (tt , tt))
     allGoodIntr (intrStream rule)  = mkAllIntrStream (_ ,, (tt , tt))
 
-    allGoodExpr : ∀ {Γ τ} → (expr : ExprM Γ τ) → AllGoodExpr expr
-    allGoodExpr (intr rule) = mkAllIntr (allGoodIntr rule)
-    allGoodExpr (elim x rule) = mkAllElim tt (buildAllElim (\_ → tt) rule) 
-
-    traceMachine : ∀ {Γ τ ϕ} → (env : Env Γ) → (term : TermM Γ τ) → (stack : CallStack τ ϕ) → TraceMachine ((env & term) ∷ stack)
-    getTraceMachine (traceMachine env (return x) stack) = {!!}
-    getTraceMachine (traceMachine env (set ρ expr term) stack) = {!traceExprM!}
-
-    traceTermM : ∀ {Γ τ} → (term : TermM Γ τ) → TraceTermM term
-    getTraceTermM (traceTermM (return x)) good-env = goodFinish (get2 good-env x)
-    getTraceTermM (traceTermM (set ρ expr term)) {env} good-env = composeTraceStepGoodStack trace-stepExprM-env-expr trace-cons-env-term-ε
-      where
-        trace-term : TraceTermM term
-        trace-term = traceTermM term
-
-        all-good-expr : AllGoodExpr expr
-        all-good-expr = allGoodExpr expr
-
-        trace-stepExprM-env-expr : TraceStep (stepExprM env expr)
-        trace-stepExprM-env-expr = traceExprM good-env all-good-expr
-
-        trace-cons-env-term-ε : GoodStack ((env & term) ∷ ε)
-        trace-cons-env-term-ε = mkGoodClosure good-env trace-term ∷ ε
+    traceMachine : ∀ {Γ τ ϕ} → (term : TermM Γ τ) → (env : Env Γ) → (stack : CallStack τ ϕ) → GoodEnv env → TraceStack stack → TraceMachine ((env & term) ∷ stack)
+    traceMachine (return x) env ε good-env trace-stack = mkTraceMachine (goodFinish (get2 good-env x))
+    traceMachine (return x) env ((env' & term) ∷ stack) good-env trace-stack = mkTraceMachine (trace-stack (get2 good-env x))
+    traceMachine (set ρ (intr rule) term) env stack good-env trace-stack = mkTraceMachine (goodContinue (getTraceMachine (traceMachine term (stepIntrM env rule ∷ env) stack (goodStepIntr {rule = rule} good-env (allGoodIntr rule) ∷ good-env) trace-stack)))
+    traceMachine (set ρ (elim x rule) term) env stack good-env trace-stack = mkTraceMachine (▹ (goodStepElim {env = env} good-env x rule) \{value} good-value → goodContinue (getTraceMachine (traceMachine term (value ∷ env) stack (good-value ∷ good-env) trace-stack)))
 
   run : ∀ {τ} → (machine : Machine τ) → TraceMachine machine
   run ((env & term) ∷ stack) = {!!}
 
   run' : ∀ {τ} → (term : TermM ε τ) → TraceMachine ((ε & term) ∷ ε)
-  --run' term = transport TraceStep (lem _) (getTraceTermM (traceTermM term) ε)
-  run' term = {!!}
-    where
-      lem2 : ∀ {ρs τ} → (stack : CallStack ρs τ) → stack ≡ composeStackStack stack ε
-      lem2 ε = refl
-      lem2 (closure ∷ stack) = cong (_∷_ closure) (lem2 stack)
-
-      lem : ∀ {τ} → (step : Step τ) → step ≡ composeStepStack step ε
-      lem (finish value) = refl
-      --lem (continue machine) = cong continue (lem2 machine)
-      lem (continue machine) = {!!}
+  run' term = traceMachine term ε ε ε goodFinish
 
   result : ∀ {τ} {machine : Machine τ} → TraceMachine machine → Value τ
-  --result trace = resultStep trace where
-  result trace = {!!} where
+  result (mkTraceMachine trace) = resultStep trace where
     resultStep : ∀ {τ} {step : Step τ} → TraceStep step → Value τ
     resultStep (goodFinish {value} _good-value) = value
     resultStep (goodContinue trace) = resultStep trace
@@ -1124,5 +1063,5 @@ module Test where
   --test' l = &apply #sum (fromList fromNat l)
 
   
-  _ : {!!}
-  _ = {!toNat (result (run' (compile (test 4 9))))!}
+  --_ : {!!}
+  --_ = {!toNat (result (run' (compile (test 4 3))))!}
