@@ -139,17 +139,68 @@ module _ where
   #Maybe : ∀ {n} → Type n → Type n
   #Maybe τ = #Either #Unit τ
 
+-- context
+module _ where
+  data Ctx : ℕ → Set where
+    ε : Ctx zero
+    ∗∷_ : ∀ {n} → Ctx n → Ctx (succ n)
+    _∷_ : ∀ {n} → Type n → Ctx n → Ctx n
+
+{-
+∀α.α→α
+
+Type0 : Set
+- _⇒_   : Type0 → Type0 → Type0
+- Maybe : Type0 → Type0
+- ℕ     : Type0
+- ∀ ∃   : Type1 → Type0
+- _#_   : Type1 → Type0 → Type0
+
+Type1 : Set
+- α₀   : Type1
+- _⇒₁_ : Type1 → Type1 → Type1
+- Maybe₁ : Type1 → Type1
+- ℕ₁   : Type1
+
+↑ᶜ : List Type0 → List Type1
+
+Term : List Type0 → Type0 → Set
+- var    : Has Γ τ → Term Γ τ
+- ⇒-intr : Term (σ ∷ Γ) τ → Term Γ (σ ⇒ τ)
+- ⇒-elim : Term Γ σ → Term Γ (σ ⇒ τ) → Term Γ τ
+- Maybe-intr : ⊤ + Term Γ τ → Term Γ (Maybe τ)
+- Maybe-elim : Term Γ ϕ → Term Γ (τ ⇒ ϕ) → Term Γ (Maybe τ) → Term Γ ϕ
+- ℕ-intr : Term Γ (Maybe ℕ) → Term Γ ℕ
+- ℕ-elim : Term Γ (Maybe ϕ ⇒ ϕ) → Term Γ ℕ → Term Γ ϕ
+- ∀-intr : Term₁ (↑ᶜ Γ) τ₁ → Term Γ (∀ τ₁)
+- ∀-elim : ∀ ϕ₀ → Term Γ (∀ τ₁) → Term Γ (τ₁ # ϕ₀)
+- ∃-intr : ∀ σ₀ → Term Γ (τ₁ # σ₀) → Term Γ (∃ τ₁)
+- ∃-elim : ∀ ϕ₀ → Term Γ (∃ τ₁) → Term₁ (↑ᶜ Γ) (τ₁ ⇒₁ ↑ᵗ ϕ₀) → Term Γ ϕ₀
+
+Term₁ : List Type1 → Type1 → Set
+- var₁    : Has Γ τ₁ → Trem Γ τ₁
+- ⇒-intr₁ : Term₁ (σ ∷ Γ) τ → Term₁ Γ (σ ⇒₁ τ)
+- ⇒-elim₁ : Term₁ Γ σ → Term₁ Γ (σ ⇒ τ) → Term₁ Γ τ
+- ℕ-intr₁ : Term₁ Γ (Maybe ℕ₁) → Term₁ Γ ℕ₁
+- ℕ-elim₁ : Term₁ Γ (Maybe ϕ ⇒ ϕ) → Term₁ Γ ℕ₁ → Term₁ Γ ϕ
+
+Value : Type0 → Set
+- ⇒-intr : Env Γ → Term (σ ∷ Γ) τ → Value (σ ⇒ τ)
+- ℕ-intr : Value Γ (Maybe ℕ) → Term Γ ℕ
+- ∀-intr : Env Γ → Term₁ (↑ᶜ Γ) τ₁ → Value (∀ τ₁)
+- ∃-intr : ∀ σ₀ → Value (τ₁ # σ₀) → Value (∃ τ₁)
+
+Thunk τ = (Γ : _) × Env Γ × Term Γ τ
+
+eliminate : Value τ → ElimR τ ϕ → Thunk ϕ
+
+-}
+
 -- intr, elim
 module _ where
   {-# TERMINATING #-}
   _#_ : ∀ {n} → Type (succ n) → Type n → Type n
-  #Var i # ϕ = {!!}
-  (τ ⇒ τ₁) # ϕ = (τ # ϕ) ⇒ (τ₁ # ϕ)
-  #Sum x # ϕ = #Sum (mapList (\τ → τ # ϕ) x)
-  #Product x # ϕ = #Product (mapList (\τ → τ # ϕ) x)
-  #Nat # ϕ = #Nat
-  #Forall τ # ϕ = {!!}
-  #Exists τ # ϕ = {!!}
+  _#_ = {!!}
 
   {-# TERMINATING #-}
   ↑ᵗ_ : ∀ {n} → Type n → Type (succ n)
@@ -182,19 +233,22 @@ module _ where
     elim : ∀ {ϕ} → %V ϕ → Elim n %AT %V ϕ τ → ExprF n %AT %F %V τ
 
 module _ where
+  Var : ∀ {n} → Ctx n → Type n → Set
+  Var = {!!}
+
   mutual
     -- regular de-bruijn term
-    data Term (n : ℕ) (Γ : List (Type n)) (τ : Type n) : Set where
-      var  : Has Γ τ → Term n Γ τ
+    data Term (n : ℕ) (Γ : Ctx n) (τ : Type n) : Set where
+      var  : Var Γ τ → Term n Γ τ
       wrap : ExprF n (TermAbsT n Γ) (TermAbs n Γ) (Term n Γ) τ → Term n Γ τ
   
-    TermAbs : (n : ℕ) → List (Type n) → (Type n → Type n → Set)
+    TermAbs : (n : ℕ) → Ctx n → (Type n → Type n → Set)
     TermAbs n Γ ρ τ = Term n (ρ ∷ Γ) τ
 
-    TermAbsT : (n : ℕ) → List (Type n) → (Type (succ n) → Set)
-    TermAbsT n Γ τ⁺ = Term (succ n) (mapList ↑ᵗ_ Γ) τ⁺
+    TermAbsT : (n : ℕ) → Ctx n → (Type (succ n) → Set)
+    TermAbsT n Γ τ⁺ = Term (succ n) (∗∷ Γ) τ⁺
 
-example : Term 1 (#Var zero ∷ ε) (#Forall (#Var zero ⇒ #Var (succ zero)))
+example : Term 1 (#Var zero ∷ ∗∷ ε) (#Forall (#Var zero ⇒ #Var (succ zero)))
 example = wrap (intr (intrForall (#Var zero ⇒ #Var (succ zero)) (wrap (intr (intrArrow (var $1))))))
 
 
@@ -225,20 +279,30 @@ module _ where
   pure : ∀ {n Γ τ} → ExprM n Γ τ → TermM n Γ τ
   pure expr = expr ▸ return $0
 
+{-
 -- run-time representation
 module _ where
+  _##_ : ∀ {n} → List (Type n) → Vector (Type 0) n → List (Type 0)
+  _##_ = ?
+
+  _#*_ : ∀ {n} → Type n → Vector (Type 0) n → Type 0
+  _#*_ = ?
+
+{-
   mutual
-    data Value (τ : Type n) : Set where
-      construct : Intr n ClosureT Closure Value τ → Value τ
+    data Value (τ : Type 0) : Set where
+      construct : Intr 0 ClosureT Closure Value τ → Value τ
 
-    data Closure (τ : Type n) : Set where
-      _&_ : ∀ {n Γ} → Vector n (Type 0) → Env n Γ → TermM n (ρ ∷ Γ) τ → Closure n ρ τ
+    data Closure (ρ : Type 0) : (τ : Type 0) → Set where
+      _&_ : ∀ {n} → {τ' : Type n} {Γ : List (Type n)}
+          → (τs : Vector (Type 0) n) → Env (Γ ## τs) → TermM n (? ∷ Γ) τ' → Closure ρ (τ' #* τs)
 
-    data ClosureT (τ : Type 0) : Set where
-      _&_ : ∀ {n Γ} → Vector (succ n) (Type 0) → Env n Γ → TermM n Γ τ → ClosureT τ
+    data ClosureT (τ : Type 1) : Set where
+      _&_ : ∀ {n Γ} → Vector (Type 0) n → Env Γ → TermM (succ n) Γ τ → ClosureT τ
 
-    Env : List (Type n) → Set
-    Env n Γ = All (Value n) Γ
+    Env : List (Type 0) → Set
+    Env Γ = All Value Γ
+    -}
 
   {-
   IntrR : Type → Set
@@ -345,3 +409,4 @@ module _ where
     where
       thunk : Thunk _
       thunk = eliminate (plugEnvElim env rule) (get env x)
+      -}

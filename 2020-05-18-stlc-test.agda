@@ -1,5 +1,39 @@
 
 
+
+module Test where
+  #zero : ∀ {Γ} → Term Γ #Nat
+  #zero = wrap (intr (intrNat (#inl #unit)))
+
+  #succ : ∀ {Γ} → Term Γ #Nat → Term Γ #Nat
+  #succ n = wrap (intr (intrNat (#inr n)))
+  
+  #add : Term ε (#Nat ⇒ #Nat ⇒ #Nat)
+  #add = #lambda (#elimNat (#lambda (#maybe (var $1) (#lambda (#succ (var $0))) (var $0))))
+
+  data ℕ : Set where
+    zero : ℕ
+    succ : ℕ → ℕ
+  {-# BUILTIN NATURAL ℕ #-}
+  
+  fromNat : ℕ → Term ε #Nat
+  fromNat zero = #zero
+  fromNat (succ n) = #succ (fromNat n)
+
+  toNat : Value #Nat → ℕ
+  toNat (construct (intrNat (construct (intrSum (here x))))) = zero
+  toNat (construct (intrNat (construct (intrSum (there (here n)))))) = succ (toNat n)
+
+  test : ℕ → ℕ → Term ε #Nat
+  test n m = #apply (#apply #add (fromNat n)) (fromNat m)
+
+  -- _ : {!!}
+  -- _ = {!toNat (evaluate (test 23 15))!}
+
+
+
+{-
+
 module Test where
   data ℕ : Set where
     zero : ℕ
@@ -45,3 +79,4 @@ module Test where
   
   --_ : {!!}
   --_ = {!toNat (result (run' (compile (test 5 9))))!}
+-}
